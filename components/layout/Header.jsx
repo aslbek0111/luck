@@ -4,7 +4,7 @@ import React, { useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useUserData } from '../../hooks/useUserData';
 import NotificationCenter from '../notifications/NotificationCenter';
-import { Coins, RotateCcw, ShieldCheck, Crown, Sparkles } from 'lucide-react';
+import { Coins, RotateCcw, ShieldCheck, Crown, Sparkles, Star, ShoppingBag } from 'lucide-react';
 
 function subscribeSnow(callback) {
   window.addEventListener('toggle-snow', callback);
@@ -112,10 +112,10 @@ export default function Header() {
               />
             </div>
 
-            {/* VIP or Admin Tag */}
+            {/* VIP and Admin Tag */}
             {isVip && (
-              <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-amber-400 to-yellow-300 text-black text-[8px] font-black rounded-full px-1 py-0.2 shadow-md flex items-center gap-0.5">
-                <Crown className="w-2.5 h-2.5" /> VIP
+              <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black text-[8px] font-black rounded-full px-1.5 py-0.2 shadow-md flex items-center gap-0.5 border border-amber-200">
+                <Crown className="w-2.5 h-2.5" /> VIP {user.is_admin ? 'ADMIN' : ''}
               </span>
             )}
             {user.is_admin && !isVip && (
@@ -132,11 +132,15 @@ export default function Header() {
               </span>
               {activeTitle && (
                 <span
-                  className="text-[9px] sm:text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded tracking-wider border shrink-0"
+                  className={`text-[9px] sm:text-[10px] font-extrabold uppercase px-1.5 py-0.2 rounded tracking-wider border shrink-0 ${
+                    activeTitle.rarity === 'pro-epic'
+                      ? 'shadow-[0_0_12px_rgba(6,182,212,0.5)] ring-1 ring-cyan-400/40 animate-pulse'
+                      : ''
+                  }`}
                   style={{
                     color: activeTitle.accentColor,
-                    borderColor: `${activeTitle.accentColor}55`,
-                    backgroundColor: `${activeTitle.accentColor}18`,
+                    borderColor: `${activeTitle.accentColor}77`,
+                    backgroundColor: `${activeTitle.accentColor}22`,
                   }}
                 >
                   {activeTitle.name}
@@ -180,6 +184,29 @@ export default function Header() {
             </Link>
           )}
 
+          {/* Coins Badge (Shop Currency) */}
+          <Link
+            href="/shop"
+            className={`flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 transition-all cursor-pointer ${
+              user.is_admin
+                ? 'bg-gradient-to-r from-amber-500/25 via-yellow-500/30 to-amber-500/25 border border-amber-300/70 shadow-[0_0_15px_rgba(245,158,11,0.35)] hover:scale-105'
+                : 'bg-zinc-900/80 border border-amber-500/40 hover:border-amber-400/80 shadow-[0_0_12px_rgba(245,158,11,0.2)]'
+            }`}
+            title={user.is_admin ? 'Бесконечные Монеты для покупок в магазине (∞)' : 'Баланс Монет для покупок в Магазине'}
+          >
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${user.is_admin ? 'bg-amber-400/25 text-amber-300' : 'bg-amber-500/25 text-amber-300'}`}>
+              <Coins className="w-3.5 h-3.5 fill-current" />
+            </div>
+            <div className="flex flex-col text-right">
+              <span className={`text-xs font-black leading-none ${user.is_admin ? 'text-amber-300 text-sm' : 'text-amber-200'}`}>
+                {user.is_admin ? '∞' : (stats.coinsBalance ?? user.coins_balance ?? user.points_balance ?? 1000)}
+              </span>
+              <span className="text-[9px] text-zinc-400 font-semibold leading-none">
+                МОНЕТ
+              </span>
+            </div>
+          </Link>
+
           {/* UC Badge */}
           <Link
             href="/profile"
@@ -212,10 +239,10 @@ export default function Header() {
             </div>
             <div className="flex flex-col text-right">
               <span className="text-xs font-black text-sky-200 leading-none">
-                {stats.freeSpins}
+                {user.is_admin ? '∞' : stats.freeSpins}
               </span>
               <span className="text-[9px] text-zinc-400 font-semibold leading-none">
-                СПИН
+                {user.is_admin ? (isVip ? 'VIP' : 'ADMIN') : 'СПИН'}
               </span>
             </div>
           </Link>

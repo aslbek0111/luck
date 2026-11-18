@@ -44,7 +44,7 @@ export default function HeroGreeting() {
               Добро пожаловать в <span className="gold-gradient-text-pure">Lucky UC!</span>
             </h1>
             <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-sm leading-relaxed">
-              Введите выданный код регистрации (10 Standard или 2 VIP слота), чтобы активировать свой аккаунт и крутить Колесо Фортуны!
+              Войдите по никнейму и паролю, чтобы активировать свой аккаунт и крутить Колесо Фортуны!
             </p>
           </div>
 
@@ -53,7 +53,7 @@ export default function HeroGreeting() {
               onClick={() => setIsBrowserAuthModalOpen(true)}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-black font-black text-xs shadow-[0_0_25px_rgba(245,158,11,0.4)] hover:shadow-[0_0_35px_rgba(245,158,11,0.6)] transition-all cursor-pointer active:scale-98"
             >
-              <span>Войти / Регистрация по коду 🎄</span>
+              <span>Войти в аккаунт 🎄</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

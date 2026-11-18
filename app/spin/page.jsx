@@ -2,14 +2,16 @@
 
 import React from 'react';
 import Link from 'next/link';
-import ChristmasSpinWheel from '../../components/spin/ChristmasSpinWheel';
+import ChristmasPrizeReel from '../../components/spin/ChristmasPrizeReel';
 import { useUserData } from '../../hooks/useUserData';
+import DailySpinsCountdown from '../../components/spin/DailySpinsCountdown';
 import GlassCard from '../../components/ui/GlassCard';
 import RarityBadge from '../../components/ui/RarityBadge';
-import { ArrowLeft, Sparkles, Trophy, Gift, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Sparkles, Trophy, Gift, RotateCcw, Crown } from 'lucide-react';
 
 export default function SpinPage() {
   const { stats, lastWins, user } = useUserData();
+  const isVipAdmin = Boolean(user?.is_vip && user?.is_admin);
 
   return (
     <div className="flex flex-col gap-4 py-2 animate-in fade-in duration-300">
@@ -24,26 +26,43 @@ export default function SpinPage() {
           </Link>
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-              <span>Колесо Фортуны</span>
+              <span>Слот-автомат Призов</span>
               <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                🎄 Новогоднее
+                🎄 2026
               </span>
             </h1>
-            <p className="text-xs text-zinc-400">Вращай колесо и собирай праздничные сувениры</p>
+            <p className="text-xs text-zinc-400">Вертикальная лента с гарантированным выигрышем</p>
           </div>
         </div>
 
         {/* Free Spins Counter Badge */}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-400/40 shadow-sm">
-          <RotateCcw className="w-3.5 h-3.5 text-sky-400" />
-          <span className="text-xs font-black text-sky-300">
-            {stats.freeSpins} СПИНОВ
-          </span>
+        <div className="flex items-center gap-2">
+          {!isVipAdmin && <DailySpinsCountdown compact />}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-400/40 shadow-sm">
+            {isVipAdmin ? (
+              <>
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-xs font-black text-amber-300">
+                  ∞ СПИНОВ (VIP)
+                </span>
+              </>
+            ) : (
+              <>
+                <RotateCcw className="w-3.5 h-3.5 text-sky-400" />
+                <span className="text-xs font-black text-sky-300">
+                  {stats.freeSpins} СПИНОВ
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* The Animated Christmas Circular Wheel */}
-      <ChristmasSpinWheel />
+      {/* 24-Hour Free Spins Live Countdown Banner */}
+      {!isVipAdmin && <DailySpinsCountdown />}
+
+      {/* The Animated Christmas Vertical Prize Reel */}
+      <ChristmasPrizeReel />
 
       {/* Recent Wins on Wheel */}
       <div className="mt-4 flex flex-col gap-2.5">

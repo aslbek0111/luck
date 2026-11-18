@@ -4,7 +4,23 @@ import React from 'react';
 import Link from 'next/link';
 import { useUserData } from '../../hooks/useUserData';
 import RarityBadge from '../ui/RarityBadge';
-import { Crown, Baby, Wind, Bot, ShieldAlert, Sparkle, Sparkles, ChevronRight, CheckCircle2 } from 'lucide-react';
+import {
+  Crown,
+  Baby,
+  Wind,
+  Bot,
+  ShieldAlert,
+  Sparkle,
+  Sparkles,
+  ChevronRight,
+  CheckCircle2,
+  Flame,
+  Ghost,
+  Swords,
+  Shield,
+  Skull,
+  Zap,
+} from 'lucide-react';
 
 const ICON_MAP = {
   Baby,
@@ -14,6 +30,12 @@ const ICON_MAP = {
   Sparkles,
   Bot,
   ShieldAlert,
+  Flame,
+  Ghost,
+  Swords,
+  Shield,
+  Skull,
+  Zap,
 };
 
 export default function ActiveTitleCard() {

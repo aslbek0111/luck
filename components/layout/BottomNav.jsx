@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUserData } from '../../hooks/useUserData';
 import { useTelegram } from '../../hooks/useTelegram';
-import { Home, RotateCcw, Crown, Sparkles, Gift, User, ShieldAlert } from 'lucide-react';
+import { Home, RotateCcw, Crown, Sparkles, Gift, User, ShieldAlert, ShoppingBag, Package } from 'lucide-react';
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -26,8 +26,7 @@ export default function BottomNav() {
       badge: stats.freeSpins > 0 ? stats.freeSpins : null,
       badgeColor: 'bg-amber-400 text-black',
     },
-    { label: 'Титулы', href: '/titles', icon: Crown },
-    { label: 'Коллекция', href: '/collection', icon: Sparkles },
+    { label: 'Магазин', href: '/shop', icon: ShoppingBag },
     {
       label: 'Подарки',
       href: '/gifts',
@@ -35,6 +34,7 @@ export default function BottomNav() {
       badge: duplicateGiftsCount > 0 ? duplicateGiftsCount : null,
       badgeColor: 'bg-rose-500 text-white',
     },
+    { label: 'Инвентарь', href: '/inventory', icon: Package },
     { label: 'Профиль', href: '/profile', icon: User },
   ];
 

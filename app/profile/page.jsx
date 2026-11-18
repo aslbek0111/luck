@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useUserData } from '../../hooks/useUserData';
 import { useTelegram } from '../../hooks/useTelegram';
 import GlassCard from '../../components/ui/GlassCard';
@@ -10,6 +11,7 @@ import RarityBadge from '../../components/ui/RarityBadge';
 import ConfirmModal from '../../components/ui/ConfirmModal';
 import EmptyState from '../../components/ui/EmptyState';
 import Toast from '../../components/ui/Toast';
+import SendGiftModal from '../../components/gifts/SendGiftModal';
 import {
   User,
   ShieldCheck,
@@ -31,17 +33,44 @@ import {
   Check,
   Search,
   Zap,
+  Star,
+  ShoppingBag,
+  Clock,
 } from 'lucide-react';
 
 export default function ProfilePage() {
-  const { user, stats, activeTitle, inventory, giftsHistory, lastWins, logout } = useUserData();
+  const router = useRouter();
+  const { user, stats, activeTitle, inventory, giftsHistory, purchasesHistory, lastWins, logout, setIsBrowserAuthModalOpen } = useUserData();
   const { triggerHaptic } = useTelegram();
 
-  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' | 'wins' | 'gifts'
+  const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' | 'wins' | 'gifts' | 'purchases'
+  const [giftSubTab, setGiftSubTab] = useState('received'); // 'received' | 'sent' | 'all'
+  const [isSendGiftModalOpen, setIsSendGiftModalOpen] = useState(false);
   const [inventorySearch, setInventorySearch] = useState('');
   const [copied, setCopied] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+
+  // Received and Sent gifts calculations
+  const receivedGifts = useMemo(() => {
+    if (!user || !giftsHistory) return [];
+    return giftsHistory.filter(
+      (g) => g.recipientId === user.id || (g.recipientUsername || '').toLowerCase() === (user.username || '').toLowerCase()
+    );
+  }, [giftsHistory, user]);
+
+  const sentGifts = useMemo(() => {
+    if (!user || !giftsHistory) return [];
+    return giftsHistory.filter(
+      (g) => g.senderId === user.id || (g.senderUsername || '').toLowerCase() === (user.username || '').toLowerCase()
+    );
+  }, [giftsHistory, user]);
+
+  const displayedGifts = useMemo(() => {
+    if (giftSubTab === 'received') return receivedGifts;
+    if (giftSubTab === 'sent') return sentGifts;
+    return giftsHistory || [];
+  }, [giftSubTab, receivedGifts, sentGifts, giftsHistory]);
 
   // Player level calculations
   const playerLevel = Math.max(1, Math.floor((stats.spinsCount || 0) / 10) + 1);
@@ -74,9 +103,35 @@ export default function ProfilePage() {
   const handleConfirmLogout = async () => {
     setIsLogoutModalOpen(false);
     await logout();
+    router.push('/');
   };
 
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center py-16 px-4 animate-in fade-in duration-300">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500/20 to-yellow-400/20 border border-amber-400/50 flex items-center justify-center text-amber-300 mb-4 shadow-[0_0_25px_rgba(245,158,11,0.25)]">
+          <User className="w-8 h-8" />
+        </div>
+        <h1 className="text-xl font-black text-white">Вход не выполнен</h1>
+        <p className="text-xs text-zinc-400 max-w-sm mt-2 mb-6">
+          Для просмотра профиля, титулов и инвентаря войдите в аккаунт или зарегистрируйтесь.
+        </p>
+        <div className="flex gap-3">
+          <Link href="/">
+            <GoldButton variant="dark">
+              <span>На главную</span>
+            </GoldButton>
+          </Link>
+          <GoldButton
+            variant="gold"
+            onClick={() => setIsBrowserAuthModalOpen(true)}
+          >
+            <span>Войти в аккаунт 🎄</span>
+          </GoldButton>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 py-2 animate-in fade-in duration-300">
@@ -146,7 +201,7 @@ export default function ProfilePage() {
             </div>
             {user.is_vip && (
               <span className="absolute -top-1 -right-1 bg-gradient-to-r from-amber-400 to-yellow-300 text-black text-[10px] font-black rounded-full px-2 py-0.5 shadow-lg border border-black flex items-center gap-1">
-                <Crown className="w-3 h-3" /> VIP
+                <Crown className="w-3 h-3" /> VIP {user.is_admin ? 'ADMIN' : ''}
               </span>
             )}
             {user.is_admin && !user.is_vip && (
@@ -179,7 +234,11 @@ export default function ProfilePage() {
               {activeTitle ? (
                 <Link href="/titles" className="group">
                   <span
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border shadow-md transition-all group-hover:scale-105"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black uppercase tracking-wider border shadow-md transition-all group-hover:scale-105 ${
+                      activeTitle.rarity === 'pro-epic'
+                        ? 'shadow-[0_0_15px_rgba(6,182,212,0.5)] ring-1 ring-cyan-400/50 animate-pulse'
+                        : ''
+                    }`}
                     style={{
                       color: activeTitle.accentColor,
                       borderColor: `${activeTitle.accentColor}66`,
@@ -202,6 +261,18 @@ export default function ProfilePage() {
                   Выбрать титул
                 </Link>
               )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setIsSendGiftModalOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold text-amber-200 bg-amber-500/15 border border-amber-400/40 hover:bg-amber-500/25 transition-all shadow-[0_0_12px_rgba(245,158,11,0.25)] cursor-pointer"
+              >
+                <Gift className="w-3.5 h-3.5 text-amber-400" />
+                <span>Отправить подарок</span>
+              </button>
             </div>
 
             {/* Level Progression Bar */}
@@ -227,16 +298,31 @@ export default function ProfilePage() {
       </div>
 
       {/* 2. Key Player Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <GlassCard glowColor="gold" className="p-3.5 flex flex-col justify-between border-amber-500/35 shadow-sm">
+          <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold">
+            <span>Монеты</span>
+            <Coins className="w-4 h-4 text-amber-400 fill-current" />
+          </div>
+          <div className="text-xl sm:text-2xl font-black text-amber-300 mt-1.5 flex items-center gap-1">
+            {user?.is_admin ? '∞' : (stats.coinsBalance ?? user?.coins_balance ?? user?.points_balance ?? 1000)}
+          </div>
+          <span className="text-[10px] text-amber-400/80 font-bold mt-0.5">
+            {user?.is_admin ? 'Бесконечные' : 'Валюта Магазина'}
+          </span>
+        </GlassCard>
+
         <GlassCard glowColor="cyan" className="p-3.5 flex flex-col justify-between border-sky-500/35 shadow-sm">
           <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold">
             <span>Осталось</span>
             <RotateCcw className="w-4 h-4 text-sky-400" />
           </div>
           <div className="text-xl sm:text-2xl font-black text-sky-300 mt-1.5">
-            {stats.freeSpins}
+            {user?.is_vip && user?.is_admin ? '∞' : stats.freeSpins}
           </div>
-          <span className="text-[10px] text-sky-400/80 font-bold mt-0.5">Спинов</span>
+          <span className="text-[10px] text-sky-400/80 font-bold mt-0.5">
+            {user?.is_vip && user?.is_admin ? 'VIP Спинов' : 'Спинов'}
+          </span>
         </GlassCard>
 
         <GlassCard glowColor="none" className="p-3.5 flex flex-col justify-between">
@@ -272,7 +358,7 @@ export default function ProfilePage() {
           <span className="text-[10px] text-zinc-500 mt-0.5">Очки славы</span>
         </GlassCard>
 
-        <GlassCard glowColor="gold" className="p-3.5 flex flex-col justify-between col-span-2 sm:col-span-1">
+        <GlassCard glowColor="gold" className="p-3.5 flex flex-col justify-between">
           <div className="flex items-center justify-between text-zinc-400 text-xs font-semibold">
             <span>Коллекция</span>
             <Box className="w-4 h-4 text-amber-400" />
@@ -284,7 +370,7 @@ export default function ProfilePage() {
         </GlassCard>
       </div>
 
-      {/* 3. Navigation Tabs: Collection, Recent Wins, Gifts History */}
+      {/* 3. Navigation Tabs: Collection, Recent Wins, Gifts History, Purchases */}
       <div className="flex gap-2 border-b border-zinc-800/80 pb-2 mt-2 overflow-x-auto no-scrollbar">
         <button
           onClick={() => {
@@ -299,6 +385,21 @@ export default function ProfilePage() {
         >
           <Box className="w-3.5 h-3.5" />
           Моя сумка ({inventory.length})
+        </button>
+
+        <button
+          onClick={() => {
+            triggerHaptic('light');
+            setActiveTab('purchases');
+          }}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+            activeTab === 'purchases'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+              : 'text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          Покупки ({purchasesHistory.length})
         </button>
 
         <button
@@ -408,7 +509,83 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* TAB 2: RECENT WINS */}
+      {/* TAB 2: PURCHASES HISTORY */}
+      {activeTab === 'purchases' && (
+        <div className="flex flex-col gap-2.5">
+          <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
+            <span>Купленные подарки и титулы за Points:</span>
+            <Link
+              href="/shop"
+              className="text-amber-400 font-semibold hover:text-amber-300 flex items-center gap-1"
+            >
+              В Магазин <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          {purchasesHistory.length === 0 ? (
+            <EmptyState
+              icon={ShoppingBag}
+              title="История покупок пуста"
+              description="Вы еще не приобретали подарки или титулы в Новогоднем Магазине."
+              actionLabel="Перейти в Магазин"
+              actionHref="/shop"
+            />
+          ) : (
+            purchasesHistory.map((purchase) => (
+              <GlassCard
+                key={purchase.id}
+                className="p-3.5 flex items-center justify-between border border-amber-500/15"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 text-xl">
+                    {purchase.itemIcon ? (
+                      purchase.itemIcon.startsWith('/') || purchase.itemIcon.startsWith('http') ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={purchase.itemIcon}
+                          alt={purchase.itemName}
+                          className="w-7 h-7 object-contain"
+                        />
+                      ) : (
+                        <span>{purchase.itemIcon}</span>
+                      )
+                    ) : purchase.itemType === 'title' ? (
+                      <Award className="w-5 h-5 text-amber-400" />
+                    ) : (
+                      <Gift className="w-5 h-5 text-amber-400" />
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-white">{purchase.itemName}</span>
+                      {purchase.quantity > 1 && (
+                        <span className="text-[10px] font-bold text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded-md border border-amber-500/30">
+                          x{purchase.quantity}
+                        </span>
+                      )}
+                      <RarityBadge rarity={purchase.itemRarity || 'common'} size="xs" />
+                    </div>
+                    <span className="text-[10px] text-zinc-500 mt-0.5 block">
+                      {purchase.itemType === 'title' ? 'Титул' : 'Подарок'} • {purchase.createdAt}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end">
+                  <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+                    <Star className="w-3 h-3 fill-amber-400" />
+                    {purchase.pointsCostTotal === 0 ? '0 PTS (VIP)' : `-${purchase.pointsCostTotal.toLocaleString('ru-RU')} PTS`}
+                  </span>
+                  <span className="text-[9px] text-emerald-400 font-medium">Успешно</span>
+                </div>
+              </GlassCard>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: RECENT WINS */}
       {activeTab === 'wins' && (
         <div className="flex flex-col gap-2.5">
           <span className="text-xs text-zinc-400 px-1">
@@ -453,69 +630,142 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* TAB 3: GIFTS HISTORY */}
+      {/* TAB 4: GIFTS HISTORY */}
       {activeTab === 'gifts' && (
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-center justify-between text-xs text-zinc-400 px-1">
-            <span>Все отправленные и полученные подарки:</span>
-            <Link
-              href="/gifts"
-              className="text-amber-400 font-semibold hover:text-amber-300 flex items-center gap-1"
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-black/40 border border-amber-500/20 p-2.5 rounded-2xl">
+            {/* Sub-tabs: Received, Sent, All */}
+            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setGiftSubTab('received');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  giftSubTab === 'received'
+                    ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                🎁 Полученные ({receivedGifts.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setGiftSubTab('sent');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  giftSubTab === 'sent'
+                    ? 'bg-amber-500/25 text-amber-300 border border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                🚀 Отправленные ({sentGifts.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  setGiftSubTab('all');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  giftSubTab === 'all'
+                    ? 'bg-white/15 text-white border border-white/25 shadow-sm'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Все ({giftsHistory.length})
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                setIsSendGiftModalOpen(true);
+              }}
+              className="text-xs font-bold px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(245,158,11,0.3)] transition-all cursor-pointer"
             >
-              Отправить подарок <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
+              <Gift className="w-3.5 h-3.5" />
+              Отправить подарок
+            </button>
           </div>
 
-          {giftsHistory.length === 0 ? (
+          {displayedGifts.length === 0 ? (
             <EmptyState
               icon={Gift}
-              title="История подарков пуста"
-              description="Вы еще не отправляли и не получали подарков от других игроков."
-              actionLabel="Перейти к подаркам"
-              actionHref="/gifts"
+              title={
+                giftSubTab === 'received'
+                  ? 'Вы пока не получали подарков'
+                  : giftSubTab === 'sent'
+                  ? 'Вы пока не отправляли подарков'
+                  : 'История подарков пуста'
+              }
+              description={
+                giftSubTab === 'received'
+                  ? 'Другие игроки могут отправить вам подарок по вашему никнейму @' + user.username
+                  : 'Порадуйте других игроков, отправив им подарок из рюкзака или магазина!'
+              }
+              actionLabel="Отправить подарок"
+              onAction={() => setIsSendGiftModalOpen(true)}
             />
           ) : (
-            giftsHistory.map((gift) => {
-              const isSender = gift.senderId === user.id;
+            displayedGifts.map((gift) => {
+              const isSender = gift.senderId === user.id || (gift.senderUsername || '').toLowerCase() === (user.username || '').toLowerCase();
 
               return (
                 <GlassCard
                   key={gift.id}
-                  className="p-3.5 flex items-center justify-between border border-amber-500/15"
+                  className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border border-amber-500/15"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-start gap-3">
                     <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
                         isSender
-                          ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                          : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.25)]'
                       }`}
                     >
-                      {isSender ? <Send className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+                      {isSender ? <Send className="w-4 h-4" /> : <Gift className="w-5 h-5 text-emerald-400 animate-pulse" />}
                     </div>
 
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-bold text-white">
                           {isSender ? (
-                            <>Подарил <strong>{gift.rewardName}</strong> игроку <strong className="text-amber-300">@{gift.recipientUsername}</strong></>
+                            <>Вы подарили <strong className="text-amber-300">«{gift.rewardName}»</strong> игроку <strong className="text-white">@{gift.recipientUsername}</strong></>
                           ) : (
-                            <>Получил <strong>{gift.rewardName}</strong> от <strong className="text-amber-300">@{gift.senderUsername}</strong></>
+                            <>Вы получили <strong className="text-emerald-300">«{gift.rewardName}»</strong> от <strong className="text-amber-300">@{gift.senderUsername}</strong></>
                           )}
                         </span>
+                        <span className="text-[10px] text-zinc-400 font-medium">({gift.quantity || 1} шт.)</span>
                       </div>
                       {gift.message && (
-                        <div className="mt-1 px-2.5 py-1 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200/90 italic">
+                        <div className="mt-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200/90 italic">
                           «{gift.message}»
                         </div>
                       )}
-                      <span className="text-[10px] text-zinc-500 mt-0.5 block">
-                        {gift.createdAt}
-                      </span>
+                      <div className="flex items-center gap-2 mt-1 text-[10px] text-zinc-500">
+                        <span>{gift.createdAt ? new Date(gift.createdAt).toLocaleString('ru-RU') : ''}</span>
+                        {gift.source === 'shop' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px] font-semibold border border-amber-500/20">
+                            Куплен в подарок
+                          </span>
+                        )}
+                        {gift.source === 'inventory' && (
+                          <span className="px-1.5 py-0.5 rounded bg-white/10 text-zinc-300 text-[10px]">
+                            Передан из рюкзака
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 
-                  <RarityBadge rarity={gift.rewardRarity} size="xs" />
+                  <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                    <RarityBadge rarity={gift.rewardRarity} size="xs" />
+                  </div>
                 </GlassCard>
               );
             })
@@ -540,15 +790,21 @@ export default function ProfilePage() {
         </button>
       </div>
 
+      {/* Send Gift Modal */}
+      <SendGiftModal
+        isOpen={isSendGiftModalOpen}
+        onClose={() => setIsSendGiftModalOpen(false)}
+      />
+
       {/* Logout Confirmation Modal */}
       <ConfirmModal
         isOpen={isLogoutModalOpen}
         onClose={() => setIsLogoutModalOpen(false)}
         onConfirm={handleConfirmLogout}
         title="Выход из аккаунта"
-        description="Вы уверены, что хотите выйти? Ваш баланс спинов и инвентарь надежно сохранены в базе данных."
+        description="Вы действительно хотите выйти из аккаунта?"
         confirmText="Выйти"
-        cancelText="Остаться"
+        cancelText="Отмена"
         variant="danger"
       />
     </div>

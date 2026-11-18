@@ -377,7 +377,7 @@ export default function ChristmasSpinWheel() {
         </GoldButton>
 
         <span className="text-[11px] text-zinc-400">
-          Осталось спинов: <strong className="text-amber-300">{stats.freeSpins}</strong> • Баланс: <strong className="text-amber-300">{stats.totalUc} UC</strong>
+          Осталось спинов: <strong className="text-amber-300">{stats.freeSpins === Infinity ? '∞' : stats.freeSpins}</strong> • Баланс: <strong className="text-amber-300">{stats.coinsBalance === Infinity ? '∞' : stats.coinsBalance} Монет</strong>
         </span>
       </div>
 
@@ -386,11 +386,15 @@ export default function ChristmasSpinWheel() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-200">
           <div className="relative w-full max-w-sm rounded-3xl border border-amber-400/60 p-6 bg-gradient-to-b from-zinc-900/98 via-zinc-950 to-black shadow-[0_0_60px_rgba(245,158,11,0.4)] text-center animate-in zoom-in-95">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500/20 via-yellow-400/20 to-emerald-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300 mx-auto mb-3 shadow-[0_0_25px_rgba(245,158,11,0.5)]">
-              <Gift className="w-9 h-9 text-amber-400 animate-bounce" />
+              {wonReward.category === 'coins' ? (
+                <Coins className="w-9 h-9 text-amber-400 animate-bounce" />
+              ) : (
+                <Gift className="w-9 h-9 text-amber-400 animate-bounce" />
+              )}
             </div>
 
             <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30 mb-2">
-              <Sparkles className="w-3.5 h-3.5" /> ВЫИГРЫШ!
+              <Sparkles className="w-3.5 h-3.5" /> {wonReward.category === 'coins' ? 'ВЫИГРЫШ МОНЕТ! 🪙' : 'ВЫИГРЫШ!'}
             </span>
 
             <h3 className="text-xl font-black text-white">{wonReward.name}</h3>
@@ -400,7 +404,9 @@ export default function ChristmasSpinWheel() {
             </div>
 
             <p className="text-xs text-zinc-300 mt-2 max-w-xs mx-auto leading-relaxed">
-              {wonReward.description || 'Награда добавлена в ваш новогодний инвентарь!'}
+              {wonReward.category === 'coins'
+                ? `Поздравляем! +${wonReward.value} Монет моментально зачислены на ваш баланс!`
+                : wonReward.description || 'Награда добавлена в ваш новогодний инвентарь!'}
             </p>
 
             <div className="mt-5">
@@ -409,7 +415,7 @@ export default function ChristmasSpinWheel() {
                 className="w-full"
                 onClick={() => setWonReward(null)}
               >
-                <span>Забрать награду 🎁</span>
+                <span>{wonReward.category === 'coins' ? 'Отлично! 🪙' : 'Забрать награду 🎁'}</span>
               </GoldButton>
             </div>
           </div>

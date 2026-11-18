@@ -6,16 +6,20 @@ import { CHRISTMAS_REWARDS, REWARDS_CATALOG } from '@/lib/catalog-data';
 
 // Default Christmas wheel segments setup
 export const DEFAULT_WHEEL_SEGMENTS = [
-  { id: 'seg-1', rewardId: 'reward-xmas-sticker', name: 'Новогодний стикер', rarity: 'common', weight: 30, isActive: true },
-  { id: 'seg-2', rewardId: 'reward-xmas-snowflake-badge', name: 'Значок Снежинка', rarity: 'common', weight: 25, isActive: true },
-  { id: 'seg-3', rewardId: 'reward-xmas-candy-cane', name: 'Леденец-Трость', rarity: 'common', weight: 20, isActive: true },
-  { id: 'seg-4', rewardId: 'reward-xmas-snow-globe', name: 'Снежный шар', rarity: 'rare', weight: 12, isActive: true },
-  { id: 'seg-5', rewardId: 'reward-xmas-santas-gift', name: 'Подарок Санты', rarity: 'rare', weight: 10, isActive: true },
-  { id: 'seg-6', rewardId: 'reward-xmas-golden-bell', name: 'Золотой колокольчик', rarity: 'rare', weight: 8, isActive: true },
-  { id: 'seg-7', rewardId: 'reward-xmas-magic-snowflake', name: 'Волшебная снежинка', rarity: 'epic', weight: 4, isActive: true },
-  { id: 'seg-8', rewardId: 'reward-xmas-golden-tree', name: 'Золотая ёлочка', rarity: 'epic', weight: 3, isActive: true },
-  { id: 'seg-9', rewardId: 'reward-xmas-santas-sleigh', name: 'Золотые сани Санты', rarity: 'legendary', weight: 1, isActive: true },
-  { id: 'seg-10', rewardId: 'reward-xmas-miracle-box', name: 'Шкатулка Рождественского чуда', rarity: 'mythic', weight: 0.5, isActive: true },
+  { id: 'seg-coins-25', rewardId: 'reward-coins-25', name: '25 Монет', rarity: 'common', weight: 28, isActive: true },
+  { id: 'seg-coins-50', rewardId: 'reward-coins-50', name: '50 Монет', rarity: 'uncommon', weight: 16, isActive: true },
+  { id: 'seg-coins-75', rewardId: 'reward-coins-75', name: '75 Монет', rarity: 'rare', weight: 8, isActive: true },
+  { id: 'seg-coins-125', rewardId: 'reward-coins-125', name: '125 Монет', rarity: 'epic', weight: 3, isActive: true },
+  { id: 'seg-1', rewardId: 'reward-xmas-sticker', name: 'Новогодний стикер', rarity: 'common', weight: 15, isActive: true },
+  { id: 'seg-2', rewardId: 'reward-xmas-snowflake-badge', name: 'Значок Снежинка', rarity: 'common', weight: 10, isActive: true },
+  { id: 'seg-3', rewardId: 'reward-xmas-candy-cane', name: 'Леденец-Трость', rarity: 'uncommon', weight: 8, isActive: true },
+  { id: 'seg-4', rewardId: 'reward-xmas-snow-globe', name: 'Снежный шар', rarity: 'rare', weight: 5, isActive: true },
+  { id: 'seg-5', rewardId: 'reward-xmas-santas-gift', name: 'Подарок Санты', rarity: 'rare', weight: 3, isActive: true },
+  { id: 'seg-6', rewardId: 'reward-xmas-golden-bell', name: 'Золотой колокольчик', rarity: 'rare', weight: 2, isActive: true },
+  { id: 'seg-7', rewardId: 'reward-xmas-magic-snowflake', name: 'Волшебная снежинка', rarity: 'epic', weight: 1.5, isActive: true },
+  { id: 'seg-8', rewardId: 'reward-xmas-golden-tree', name: 'Золотая ёлочка', rarity: 'epic', weight: 1, isActive: true },
+  { id: 'seg-9', rewardId: 'reward-xmas-santas-sleigh', name: 'Золотые сани Санты', rarity: 'legendary', weight: 0.4, isActive: true },
+  { id: 'seg-10', rewardId: 'reward-xmas-miracle-box', name: 'Шкатулка Рождественского чуда', rarity: 'mythic', weight: 0.1, isActive: true },
 ];
 
 async function checkAdmin(request) {

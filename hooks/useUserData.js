@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useMemo, useCallback, useEffect } from 'react';
-import { TITLES_LIST, REWARDS_CATALOG } from '../lib/catalog-data';
+import { TITLES_LIST, REWARDS_CATALOG, resolveTitle } from '../lib/catalog-data';
 import { useTelegram } from './useTelegram';
 
 const UserDataContext = createContext(null);
@@ -14,17 +14,19 @@ export function UserDataProvider({ children }) {
   const [inventoryRaw, setInventoryRaw] = useState([]);
   const [events, setEvents] = useState([]);
   const [giftsHistoryRaw, setGiftsHistoryRaw] = useState([]);
+  const [purchasesHistoryRaw, setPurchasesHistoryRaw] = useState([]);
   const [lastWinsRaw, setLastWinsRaw] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isBrowserAuthModalOpen, setIsBrowserAuthModalOpen] = useState(false);
+  const [logoutNotice, setLogoutNotice] = useState('');
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
     try {
-      const res = await fetch('/api/notifications');
+      const res = await fetch('/api/notifications', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -43,6 +45,7 @@ export function UserDataProvider({ children }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notificationIds }),
+        cache: 'no-store',
       });
       fetchNotifications();
     } catch {
@@ -56,9 +59,9 @@ export function UserDataProvider({ children }) {
       setIsSyncing(true);
 
       const [profileRes, feedRes, lbRes] = await Promise.allSettled([
-        fetch('/api/user/profile'),
-        fetch('/api/feed'),
-        fetch('/api/leaderboard'),
+        fetch('/api/user/profile', { cache: 'no-store' }),
+        fetch('/api/feed', { cache: 'no-store' }),
+        fetch('/api/leaderboard', { cache: 'no-store' }),
       ]);
 
       if (profileRes.status === 'fulfilled' && profileRes.value.ok) {
@@ -67,10 +70,9 @@ export function UserDataProvider({ children }) {
           setCurrentUser(data.user);
           if (data.inventory) setInventoryRaw(data.inventory);
           if (data.giftsHistory) setGiftsHistoryRaw(data.giftsHistory);
+          if (data.purchasesHistory) setPurchasesHistoryRaw(data.purchasesHistory);
           if (data.lastWins) setLastWinsRaw(data.lastWins);
         }
-      } else if (profileRes.status === 'fulfilled' && profileRes.value.status === 401) {
-        setCurrentUser(null);
       }
 
       if (feedRes.status === 'fulfilled' && feedRes.value.ok) {
@@ -125,7 +127,7 @@ export function UserDataProvider({ children }) {
 
       // 2. Regular browser session check via /api/auth/me
       try {
-        const meRes = await fetch('/api/auth/me');
+        const meRes = await fetch('/api/auth/me', { cache: 'no-store' });
         if (meRes.ok) {
           const meData = await meRes.json();
           if (active && meData.authenticated && meData.user) {
@@ -144,7 +146,10 @@ export function UserDataProvider({ children }) {
       if (active) {
         setCurrentUser(null);
         try {
-          const [fRes, lbRes] = await Promise.all([fetch('/api/feed'), fetch('/api/leaderboard')]);
+          const [fRes, lbRes] = await Promise.all([
+            fetch('/api/feed', { cache: 'no-store' }),
+            fetch('/api/leaderboard', { cache: 'no-store' }),
+          ]);
           if (fRes.ok) {
             const fData = await fRes.json();
             if (active && fData.success && fData.events) setEvents(fData.events);
@@ -195,26 +200,34 @@ export function UserDataProvider({ children }) {
 
   // Active equipped title object
   const activeTitle = useMemo(() => {
-    if (!currentUser?.active_title_id) return null;
-    return TITLES_LIST.find((t) => t.id === currentUser.active_title_id) || null;
+    const titleId = currentUser?.active_title_id || (currentUser?.is_vip ? 'title-vip' : null);
+    if (!titleId) return null;
+    return resolveTitle(titleId) || null;
   }, [currentUser]);
 
   // Browser Login / Register action
   const browserAuth = useCallback(
-    async ({ username, password, confirmPassword, code, action = 'login' }) => {
+    async ({ username, code, recoveryKey, password, action = 'login' }) => {
       try {
         const res = await fetch('/api/auth/browser', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password, confirmPassword, code, action }),
+          body: JSON.stringify({ username, code, recoveryKey, password, action }),
+          cache: 'no-store',
         });
         const data = await res.json();
         if (data.success && data.user) {
           setCurrentUser(data.user);
+          setLogoutNotice('');
           setIsBrowserAuthModalOpen(false);
           await syncProfile();
           triggerHaptic('success');
-          return { success: true, user: data.user, greeting: data.greeting };
+          return {
+            success: true,
+            user: data.user,
+            recoveryKey: data.recoveryKey,
+            greeting: data.greeting,
+          };
         }
         triggerHaptic('error');
         return { success: false, error: data.error };
@@ -229,7 +242,7 @@ export function UserDataProvider({ children }) {
   // Logout action
   const logout = useCallback(async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await fetch('/api/auth/logout', { method: 'POST', cache: 'no-store' });
     } catch {
       // ignore
     }
@@ -239,8 +252,10 @@ export function UserDataProvider({ children }) {
     setGiftsHistoryRaw([]);
     setNotifications([]);
     setUnreadCount(0);
+    setLogoutNotice('Вы успешно вышли из аккаунта');
     setIsBrowserAuthModalOpen(true);
     triggerHaptic('medium');
+    return { success: true, message: 'Вы успешно вышли из аккаунта' };
   }, [triggerHaptic]);
 
   // Switch active user (Dev/Testing)
@@ -308,20 +323,26 @@ export function UserDataProvider({ children }) {
 
   // Send gift (Server + Local)
   const sendGift = useCallback(
-    async ({ recipientUsername, rewardId, quantity = 1, message = '' }) => {
+    async ({ recipientUsername, rewardId, quantity = 1, message = '', source = 'inventory' }) => {
       if (!currentUser) return { success: false, error: 'Пользователь не авторизован' };
 
       try {
         const res = await fetch('/api/gifts/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recipientUsername, rewardId, quantity, message }),
+          body: JSON.stringify({ recipientUsername, rewardId, quantity, message, source }),
         });
         const data = await res.json();
         if (data.success) {
           syncProfile();
           triggerHaptic('success');
-          return { success: true, recipient: data.recipient, item: data.item || data.reward_name };
+          return {
+            success: true,
+            recipient: data.recipient,
+            item: data.item || data.reward_name,
+            cost: data.cost,
+            message: data.message,
+          };
         }
         triggerHaptic('error');
         return { success: false, error: data.error };
@@ -343,6 +364,8 @@ export function UserDataProvider({ children }) {
       });
       const data = await res.json();
       if (data.success) {
+        const newCoins = typeof data.coins_balance === 'number' ? data.coins_balance : (typeof data.coinsBalance === 'number' ? data.coinsBalance : undefined);
+        const newPoints = typeof data.points_balance === 'number' ? data.points_balance : (typeof data.pointsBalance === 'number' ? data.pointsBalance : undefined);
         setCurrentUser((prev) =>
           prev
             ? {
@@ -351,6 +374,8 @@ export function UserDataProvider({ children }) {
                 spins_count: data.total_spins,
                 total_uc: data.total_uc,
                 total_popularity: data.total_popularity,
+                coins_balance: newCoins ?? prev.coins_balance,
+                points_balance: newPoints ?? prev.points_balance,
               }
             : null
         );
@@ -365,20 +390,105 @@ export function UserDataProvider({ children }) {
     }
   }, [currentUser, syncProfile, triggerHaptic]);
 
+  // Buy Shop Item (Coins / Points)
+  const buyShopItem = useCallback(
+    async ({ itemId, quantity = 1 }) => {
+      if (!currentUser) return { success: false, error: 'Пользователь не авторизован' };
+
+      try {
+        const res = await fetch('/api/shop/purchase', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemId, quantity }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          const newCoins = typeof data.coinsBalance === 'number' ? data.coinsBalance : data.coins_balance;
+          const newPoints = typeof data.pointsBalance === 'number' ? data.pointsBalance : data.points_balance;
+          setCurrentUser((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  coins_balance: newCoins ?? prev.coins_balance,
+                  points_balance: newPoints ?? prev.points_balance,
+                }
+              : null
+          );
+          syncProfile();
+          triggerHaptic('success');
+          return data;
+        }
+        triggerHaptic('error');
+        return data;
+      } catch (err) {
+        triggerHaptic('error');
+        return { success: false, error: err.message };
+      }
+    },
+    [currentUser, syncProfile, triggerHaptic]
+  );
+
+  // Check & grant 24-hour daily free spins
+  const checkDailySpins = useCallback(async () => {
+    try {
+      const res = await fetch('/api/spin/daily', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          const spinsLeft = typeof data.free_spins === 'number' ? data.free_spins : (typeof data.freeSpins === 'number' ? data.freeSpins : undefined);
+          setCurrentUser((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  free_spins_balance: spinsLeft !== undefined ? spinsLeft : prev.free_spins_balance,
+                  last_daily_spins_at: data.last_daily_spins_at ?? prev.last_daily_spins_at,
+                  next_daily_spins_at: data.next_daily_spins_at ?? prev.next_daily_spins_at,
+                  seconds_until_next_spins: data.seconds_remaining ?? prev.seconds_until_next_spins,
+                }
+              : null
+          );
+          return data;
+        }
+      }
+    } catch {
+      // Non-critical
+    }
+    return null;
+  }, []);
+
   // Total stats calculations
   const stats = useMemo(() => {
     const totalRewardsCount = inventory.reduce((acc, curr) => acc + (curr.quantity || 1), 0);
     const uniqueRewardsCount = inventory.length;
     const achievementsCount = Math.min(15, Math.floor((currentUser?.spins_count || 0) / 10) + uniqueRewardsCount);
+    const isVipAdmin = Boolean(currentUser?.is_admin && currentUser?.is_vip);
+    const isAdmin = Boolean(currentUser?.is_admin);
+    const isVip = Boolean(currentUser?.is_vip);
+
+    const rawCoins = isVip || isAdmin
+      ? (typeof currentUser?.coins_balance === 'number' ? Math.max(currentUser.coins_balance, 1000) : 1000)
+      : (typeof currentUser?.coins_balance === 'number' ? currentUser.coins_balance : 0);
+
+    const rawUc = (isVip || isAdmin)
+      ? (typeof currentUser?.total_uc === 'number' ? Math.max(currentUser.total_uc, 5000) : 5000)
+      : (currentUser?.total_uc || 0);
+    const rawPopularity = currentUser?.total_popularity || 0;
 
     return {
       totalRewardsCount,
       uniqueRewardsCount,
       achievementsCount,
       spinsCount: currentUser?.spins_count || 0,
-      totalUc: currentUser?.total_uc || 0,
-      popularity: currentUser?.total_popularity || 0,
-      freeSpins: currentUser?.free_spins_balance || 0,
+      totalUc: rawUc,
+      popularity: rawPopularity,
+      pp: rawPopularity,
+      freeSpins: (isVipAdmin || isAdmin) ? Infinity : (currentUser?.free_spins_balance || 0),
+      coinsBalance: isVipAdmin || isAdmin ? Infinity : rawCoins,
+      pointsBalance: isVipAdmin || isAdmin ? Infinity : rawCoins,
+      rawCoinsBalance: rawCoins,
+      rawPointsBalance: rawCoins,
+      nextDailySpinsAt: currentUser?.next_daily_spins_at || null,
+      secondsUntilNextSpins: currentUser?.seconds_until_next_spins || 0,
     };
   }, [inventory, currentUser]);
 
@@ -389,6 +499,7 @@ export function UserDataProvider({ children }) {
       inventory,
       events,
       giftsHistory: giftsHistoryRaw,
+      purchasesHistory: purchasesHistoryRaw,
       lastWins,
       allUsers,
       stats,
@@ -403,13 +514,17 @@ export function UserDataProvider({ children }) {
       isInsideTelegram,
       isBrowserAuthModalOpen,
       setIsBrowserAuthModalOpen,
+      logoutNotice,
+      setLogoutNotice,
       browserAuth,
       logout,
       switchUser,
       equipTitle,
       unequipTitle,
       sendGift,
+      buyShopItem,
       playSpin,
+      checkDailySpins,
       refreshData: syncProfile,
     }),
     [
@@ -418,6 +533,7 @@ export function UserDataProvider({ children }) {
       inventory,
       events,
       giftsHistoryRaw,
+      purchasesHistoryRaw,
       lastWins,
       allUsers,
       stats,
@@ -429,13 +545,16 @@ export function UserDataProvider({ children }) {
       isSyncing,
       isInsideTelegram,
       isBrowserAuthModalOpen,
+      logoutNotice,
       browserAuth,
       logout,
       switchUser,
       equipTitle,
       unequipTitle,
       sendGift,
+      buyShopItem,
       playSpin,
+      checkDailySpins,
       syncProfile,
     ]
   );

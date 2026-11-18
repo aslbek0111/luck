@@ -64,11 +64,14 @@ export async function POST(request) {
             username: tgUser.username || `user_${tgUser.id}`,
             first_name: tgUser.first_name || 'Игрок',
             last_name: tgUser.last_name || '',
-            avatar_url: tgUser.photo_url || '',
-            free_spins_balance: 5,
+            free_spins_balance: 2,
+            last_daily_spins_at: new Date().toISOString(),
             spins_count: 0,
             total_uc: 0,
+            coins_balance: 0,
+            points_balance: 0,
             total_popularity: 0,
+            popularity_updated_at: new Date().toISOString(),
           })
           .select()
           .single();
@@ -113,11 +116,16 @@ export async function POST(request) {
           active_title_id: null,
           spins_count: 0,
           total_uc: 0,
+          coins_balance: 0,
+          points_balance: 0,
           total_popularity: 0,
-          free_spins_balance: 5,
+          popularity_updated_at: new Date().toISOString(),
+          free_spins_balance: 2,
+          last_daily_spins_at: new Date().toISOString(),
           is_approved: true,
           is_blocked: false,
           is_admin: false,
+          is_vip: false,
         };
         users.push(found);
         mockStore.saveUsers(users);

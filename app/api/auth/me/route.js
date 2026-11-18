@@ -6,8 +6,14 @@ import { mockStore } from '@/lib/mock-store';
 export async function GET(request) {
   try {
     const session = await getSessionUser(request);
+    const createResponse = (body, status = 200) => {
+      const res = NextResponse.json(body, { status });
+      res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      return res;
+    };
+
     if (!session || !session.userId) {
-      return NextResponse.json({ success: true, authenticated: false, user: null }, { status: 200 });
+      return createResponse({ success: true, authenticated: false, user: null }, 200);
     }
 
     let user = null;
@@ -20,7 +26,7 @@ export async function GET(request) {
         .maybeSingle();
 
       if (error || !data) {
-        return NextResponse.json({ success: true, authenticated: false, user: null }, { status: 200 });
+        return createResponse({ success: true, authenticated: false, user: null }, 200);
       }
       user = data;
     } else {
@@ -28,7 +34,7 @@ export async function GET(request) {
     }
 
     if (!user) {
-      return NextResponse.json({ success: true, authenticated: false, user: null }, { status: 200 });
+      return createResponse({ success: true, authenticated: false, user: null }, 200);
     }
 
     const sanitizedUser = { ...user };
@@ -36,12 +42,14 @@ export async function GET(request) {
     delete sanitizedUser.browser_pin;
     delete sanitizedUser.auth_token;
 
-    return NextResponse.json({
+    return createResponse({
       success: true,
       authenticated: true,
       user: sanitizedUser,
     });
   } catch (err) {
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    const errRes = NextResponse.json({ success: false, error: err.message }, { status: 500 });
+    errRes.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    return errRes;
   }
 }

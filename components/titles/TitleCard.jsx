@@ -17,6 +17,12 @@ import {
   Check,
   Gift,
   Eye,
+  Flame,
+  Ghost,
+  Swords,
+  Shield,
+  Skull,
+  Zap,
 } from 'lucide-react';
 
 const ICON_MAP = {
@@ -27,6 +33,12 @@ const ICON_MAP = {
   Sparkles,
   Bot,
   ShieldAlert,
+  Flame,
+  Ghost,
+  Swords,
+  Shield,
+  Skull,
+  Zap,
 };
 
 export default function TitleCard({ title, onInspect }) {
@@ -41,10 +53,13 @@ export default function TitleCard({ title, onInspect }) {
   const duplicateCount = Math.max(0, quantity - 1);
 
   // Dynamic Glow and border based on title rarity and theme
+  const isProEpic = title.rarity === 'pro-epic';
   const isVip = title.slug === 'vip';
   const isCyborg = title.slug === 'cyborg';
 
-  const cardBorderClass = isVip
+  const cardBorderClass = isProEpic
+    ? 'border-cyan-400/80 hover:border-cyan-300 shadow-[0_0_30px_rgba(6,182,212,0.35)] ring-1 ring-cyan-500/30'
+    : isVip
     ? 'border-amber-400/70 hover:border-amber-300 shadow-[0_0_25px_rgba(245,158,11,0.35)]'
     : isCyborg
     ? 'border-purple-500/70 hover:border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.35)]'
@@ -82,6 +97,9 @@ export default function TitleCard({ title, onInspect }) {
             }}
           >
             <Icon className="w-8 h-8" style={{ color: title.accentColor }} />
+            {isProEpic && (
+              <div className="absolute inset-0 bg-gradient-to-tr from-cyan-400/25 via-sky-400/15 to-fuchsia-400/25 animate-pulse pointer-events-none" />
+            )}
             {isVip && (
               <div className="absolute inset-0 bg-gradient-to-tr from-amber-400/20 via-transparent to-yellow-200/20 animate-pulse pointer-events-none" />
             )}
@@ -113,6 +131,10 @@ export default function TitleCard({ title, onInspect }) {
             {isOwned ? (
               <span className="text-emerald-400 font-bold flex items-center gap-1">
                 <Check className="w-3 h-3" /> В коллекции: {quantity} шт.
+              </span>
+            ) : title.priceCoins ? (
+              <span className="text-amber-400 font-extrabold flex items-center gap-1">
+                🪙 {title.priceCoins} Монет
               </span>
             ) : (
               <span className="text-zinc-500">Не разблокирован</span>

@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { useTelegram } from '../../hooks/useTelegram';
 import { useUserData } from '../../hooks/useUserData';
-import { Sparkles, Crown, Gift, Activity, RotateCcw, Trophy, ChevronRight, ShieldCheck } from 'lucide-react';
+import { Sparkles, Crown, Gift, Activity, RotateCcw, Trophy, ChevronRight, ShieldCheck, ShoppingBag, Package } from 'lucide-react';
 
 export default function QuickNavGrid() {
   const { triggerHaptic } = useTelegram();
@@ -28,6 +28,17 @@ export default function QuickNavGrid() {
       border: 'border-amber-400/50 hover:border-amber-300 shadow-[0_0_25px_rgba(245,158,11,0.25)]',
     },
     {
+      title: 'Новогодний Магазин',
+      description: 'Покупка подарков, сувениров и титулов за Points',
+      href: '/shop',
+      icon: ShoppingBag,
+      color: '#c084fc',
+      badge: user?.is_admin ? '∞ POINTS' : `${stats.pointsBalance ?? user?.points_balance ?? 1000} PTS`,
+      badgeGlow: true,
+      gradient: 'from-purple-950/50 via-zinc-900/70 to-zinc-950/90',
+      border: 'border-purple-500/40 hover:border-purple-300 shadow-[0_0_20px_rgba(192,132,252,0.25)]',
+    },
+    {
       title: 'Система Подарков',
       description: 'Подарить новогодний сувенир другу с пожеланием',
       href: '/gifts',
@@ -37,6 +48,16 @@ export default function QuickNavGrid() {
       badgeGlow: giftsCount > 0,
       gradient: 'from-rose-950/40 via-zinc-900/60 to-zinc-950/80',
       border: 'border-rose-500/30 hover:border-rose-400/60',
+    },
+    {
+      title: 'Мой Инвентарь',
+      description: 'Все купленные подарки, смена и экипировка титулов',
+      href: '/inventory',
+      icon: Package,
+      color: '#34d399',
+      badge: `${stats.uniqueRewardsCount} предметов`,
+      gradient: 'from-emerald-950/40 via-zinc-900/60 to-zinc-950/80',
+      border: 'border-emerald-500/30 hover:border-emerald-400/60',
     },
     {
       title: 'Моя Коллекция',

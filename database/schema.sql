@@ -14,7 +14,8 @@ DO $$ BEGIN
         'roses',
         'jokes',
         'spins',
-        'uc'
+        'uc',
+        'coins'
     );
 EXCEPTION
     WHEN duplicate_object THEN null;
@@ -23,8 +24,10 @@ END $$;
 DO $$ BEGIN
     CREATE TYPE reward_rarity AS ENUM (
         'common',
+        'uncommon',
         'rare',
         'epic',
+        'pro-epic',
         'mythic',
         'legendary'
     );
@@ -55,9 +58,14 @@ CREATE TABLE IF NOT EXISTS public.users (
     total_uc INTEGER DEFAULT 0,
     total_popularity INTEGER DEFAULT 0,
     free_spins_balance INTEGER DEFAULT 5,
+    coins_balance INTEGER DEFAULT 1000 CHECK (coins_balance >= 0),
+    points_balance INTEGER DEFAULT 1000 CHECK (points_balance >= 0),
     is_approved BOOLEAN DEFAULT TRUE,
     is_blocked BOOLEAN DEFAULT FALSE,
     is_admin BOOLEAN DEFAULT FALSE,
+    is_vip BOOLEAN DEFAULT FALSE,
+    profile_frame TEXT DEFAULT 'default',
+    vip_badge TEXT DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

@@ -1,9 +1,14 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { NextResponse } from 'next/server';
 import { supabaseServer, isServerSupabaseConfigured } from '@/lib/supabaseServer';
 import { setSessionCookie } from '@/lib/session';
-import { mockStore } from '@/lib/mock-store';
+import { mockStore, STANDARD_ACCOUNTS, VIP_ACCOUNTS, ADMIN_ACCOUNTS } from '@/lib/mock-store';
 import { toDbUuid } from '@/lib/catalog-data';
+
+// Optional environment-configured admin credentials
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
 // In-memory rate limiting tracker for brute-force protection
 const rateLimitMap = new Map();
@@ -43,7 +48,7 @@ function recordFailedAttempt(key) {
   record.count += 1;
   record.lastAttempt = now;
 
-  if (record.count >= 5) {
+  if (record.count >= 8) {
     record.blockedUntil = now + 15 * 60 * 1000;
   }
   rateLimitMap.set(key, record);
@@ -56,7 +61,7 @@ function clearRateLimit(key) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { username, password, confirmPassword, code, action = 'login' } = body;
+    const { username, password, recoveryKey, action = 'login' } = body;
 
     if (!username || !username.trim()) {
       return NextResponse.json({ success: false, error: 'Укажите никнейм игрока' }, { status: 400 });
@@ -72,105 +77,47 @@ export async function POST(request) {
       );
     }
 
-    if (!password || typeof password !== 'string') {
-      return NextResponse.json({ success: false, error: 'Введите пароль' }, { status: 400 });
-    }
-
-    if (password.length < 4 || password.length > 128) {
-      return NextResponse.json(
-        { success: false, error: 'Пароль должен содержать от 4 до 128 символов' },
-        { status: 400 }
-      );
+    const enteredPassword = (password || recoveryKey || '').trim();
+    if (!enteredPassword) {
+      return NextResponse.json({ success: false, error: 'Укажите пароль' }, { status: 400 });
     }
 
     const rateLimitKey = getRateLimitKey(cleanUsername, request);
+    const rateLimitCheck = checkRateLimit(rateLimitKey);
+    if (!rateLimitCheck.allowed) {
+      return NextResponse.json({ success: false, error: rateLimitCheck.error }, { status: 429 });
+    }
+
     let userRecord = null;
 
-    if (action === 'register') {
-      // 1. Password confirmation check
-      if (confirmPassword !== undefined && password !== confirmPassword) {
-        return NextResponse.json({ success: false, error: 'Пароли не совпадают' }, { status: 400 });
-      }
+    if (isServerSupabaseConfigured && supabaseServer) {
+      const { data: existingUser } = await supabaseServer
+        .from('users')
+        .select('*')
+        .ilike('username', cleanUsername)
+        .maybeSingle();
 
-      // 2. Strict Registration Code check
-      if (!code || !code.trim()) {
-        return NextResponse.json(
-          { success: false, error: 'Введите один из 12 выданных кодов регистрации' },
-          { status: 400 }
-        );
-      }
+      userRecord = existingUser;
+    } else {
+      userRecord = mockStore.getUserByUsername(cleanUsername);
+    }
 
-      const cleanCode = code.trim();
-      const passwordHash = await bcrypt.hash(password, 10);
-      const fakeTgId = 1000000000 + Math.floor(Math.random() * 899999999);
+    // If user does not exist in store
+    if (!userRecord) {
+      if (action === 'register') {
+        if (enteredPassword.length < 3) {
+          return NextResponse.json(
+            { success: false, error: 'Пароль должен содержать минимум 3 символа' },
+            { status: 400 }
+          );
+        }
+        const passwordHash = await bcrypt.hash(enteredPassword, 10);
+        const fakeTgId = 1000000000 + Math.floor(Math.random() * 899999999);
 
-      if (isServerSupabaseConfigured && supabaseServer) {
-        // 1. Try atomic RPC first
-        const { data: rpcData, error: rpcErr } = await supabaseServer.rpc('register_player_with_code_atomic', {
-          p_username: cleanUsername,
-          p_password_hash: passwordHash,
-          p_code: cleanCode,
-          p_first_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
-        });
+        if (isServerSupabaseConfigured && supabaseServer) {
+          const isAdminAccount = ADMIN_ACCOUNTS.some((a) => a.toLowerCase() === cleanUsername);
+          const isVipAccount = VIP_ACCOUNTS.some((v) => v.toLowerCase() === cleanUsername);
 
-        if (!rpcErr && rpcData) {
-          if (!rpcData.success) {
-            return NextResponse.json({ success: false, error: rpcData.error }, { status: 400 });
-          }
-          userRecord = rpcData.user;
-        } else {
-          // Fallback direct server queries if RPC is not yet created
-          const { data: existingUser } = await supabaseServer
-            .from('users')
-            .select('id, username')
-            .ilike('username', cleanUsername)
-            .maybeSingle();
-
-          if (existingUser) {
-            return NextResponse.json(
-              { success: false, error: 'Пользователь с таким никнеймом уже зарегистрирован' },
-              { status: 400 }
-            );
-          }
-
-          // Validate code in registration_codes table
-          const { data: codeData, error: codeErr } = await supabaseServer
-            .from('registration_codes')
-            .select('*')
-            .ilike('code', cleanCode)
-            .maybeSingle();
-
-          if (codeErr || !codeData) {
-            return NextResponse.json(
-              { success: false, error: 'Неверный код регистрации. Проверьте код и повторите ввод.' },
-              { status: 400 }
-            );
-          }
-
-          if (codeData.is_used) {
-            return NextResponse.json(
-              { success: false, error: 'Этот код регистрации уже был использован другим игроком.' },
-              { status: 400 }
-            );
-          }
-
-          // Validate max 12 non-admin players cap
-          const { count: nonAdminCount } = await supabaseServer
-            .from('users')
-            .select('*', { count: 'exact', head: true })
-            .eq('is_admin', false);
-
-          if ((nonAdminCount || 0) >= 12) {
-            return NextResponse.json(
-              { success: false, error: 'Регистрация закрыта: все 12 игровых мест заняты.' },
-              { status: 400 }
-            );
-          }
-
-          const isVip = codeData.type === 'vip';
-          const initialUc = isVip ? 5000 : 0;
-
-          // Insert new player
           const { data: newUser, error: insertErr } = await supabaseServer
             .from('users')
             .insert({
@@ -179,15 +126,21 @@ export async function POST(request) {
               first_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
               avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
               password_hash: passwordHash,
-              free_spins_balance: 0, // Spins managed by admin
+              recovery_key_hash: passwordHash,
+              free_spins_balance: (isAdminAccount || isVipAccount) ? 999999 : 2,
               spins_count: 0,
-              total_uc: initialUc,
+              total_uc: (isAdminAccount || isVipAccount) ? 5000 : 0,
               total_popularity: 0,
+              popularity_updated_at: new Date().toISOString(),
+              last_daily_spins_at: new Date().toISOString(),
               is_approved: true,
               is_blocked: false,
-              is_admin: false,
-              is_vip: isVip,
-              profile_frame: isVip ? 'vip_gold' : 'default',
+              is_admin: isAdminAccount || isVipAccount,
+              is_vip: isVipAccount,
+              profile_frame: isAdminAccount ? 'admin_shield' : (isVipAccount ? 'vip_gold' : 'default'),
+              vip_badge: isVipAccount ? 'VIP_ADMIN' : null,
+              coins_balance: isAdminAccount ? 999999 : (isVipAccount ? 1000 : 0),
+              points_balance: isAdminAccount ? 999999 : (isVipAccount ? 1000 : 0),
             })
             .select()
             .single();
@@ -198,192 +151,127 @@ export async function POST(request) {
               { status: 500 }
             );
           }
+          userRecord = newUser;
+        } else {
+          const isAdminAccount = ADMIN_ACCOUNTS.some((a) => a.toLowerCase() === cleanUsername);
+          const isVipAccount = VIP_ACCOUNTS.some((v) => v.toLowerCase() === cleanUsername);
 
-          // Mark registration code as used
-          await supabaseServer
-            .from('registration_codes')
-            .update({
-              is_used: true,
-              used_by_user_id: newUser.id,
-              used_at: new Date().toISOString(),
-            })
-            .eq('code', codeData.code);
+          const newUser = {
+            id: 'user-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            telegram_id: fakeTgId,
+            username: cleanUsername,
+            first_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
+            avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+            active_title_id: isVipAccount ? 'title-vip' : null,
+            password_hash: passwordHash,
+            recovery_key_hash: passwordHash,
+            spins_count: 0,
+            total_uc: (isAdminAccount || isVipAccount) ? 5000 : 0,
+            total_popularity: 0,
+            popularity_updated_at: new Date().toISOString(),
+            free_spins_balance: (isAdminAccount || isVipAccount) ? 999999 : 2,
+            last_daily_spins_at: new Date().toISOString(),
+            is_approved: true,
+            is_blocked: false,
+            is_admin: isAdminAccount || isVipAccount,
+            is_vip: isVipAccount,
+            profile_frame: isAdminAccount ? 'admin_shield' : (isVipAccount ? 'vip_gold' : 'default'),
+            vip_badge: isVipAccount ? 'VIP_ADMIN' : null,
+            coins_balance: isAdminAccount ? 999999 : (isVipAccount ? 1000 : 0),
+            points_balance: isAdminAccount ? 999999 : (isVipAccount ? 1000 : 0),
+            created_at: new Date().toISOString(),
+          };
 
-          // Add starter item with proper DB UUID
-          const starterUuid = toDbUuid('reward-xmas-sticker');
-          if (starterUuid) {
-            await supabaseServer.from('user_inventory').insert({
-              user_id: newUser.id,
-              reward_id: starterUuid,
-              quantity: 1,
-            });
-          }
-
-          // Add welcome notification
-          try {
-            await supabaseServer.from('notifications').insert({
-              user_id: newUser.id,
-              type: 'system',
-              title: 'Добро пожаловать в Lucky UC! 🎄',
-              message: isVip
-                ? 'Вам начислен VIP-статус и стартовый баланс 5000 UC! Счастливого Нового года!'
-                : 'Вы успешно зарегистрированы в новогодней платформе Lucky UC! Ожидайте начисления спинов от Администратора.',
-            });
-          } catch {
-            // Non-critical
-          }
-
+          mockStore.addUser(newUser);
+          mockStore.addItemToInventory(newUser.id, 'reward-xmas-sticker', 1);
           userRecord = newUser;
         }
       } else {
-        if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_DEV_STORE) {
-          return NextResponse.json(
-            { success: false, error: 'База данных Supabase не настроена на сервере' },
-            { status: 503 }
-          );
-        }
-
-        // Uniqueness check in mockStore
-        const existing = mockStore.getUserByUsername(cleanUsername);
-        if (existing) {
-          return NextResponse.json(
-            { success: false, error: 'Пользователь с таким никнеймом уже зарегистрирован' },
-            { status: 400 }
-          );
-        }
-
-        // Validate code in mockStore
-        const codeResult = mockStore.validateAndUseCode(cleanCode, 'temp');
-        if (!codeResult.valid) {
-          return NextResponse.json({ success: false, error: codeResult.error }, { status: 400 });
-        }
-
-        const isVip = codeResult.type === 'vip';
-        const initialUc = isVip ? 5000 : 0;
-
-        const newUser = {
-          id: 'user-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-          telegram_id: fakeTgId,
-          username: cleanUsername,
-          first_name: cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1),
-          avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-          active_title_id: null,
-          password_hash: passwordHash,
-          spins_count: 0,
-          total_uc: initialUc,
-          total_popularity: 0,
-          free_spins_balance: 0, // Spins managed by admin
-          is_approved: true,
-          is_blocked: false,
-          is_admin: false,
-          is_vip: isVip,
-          profile_frame: isVip ? 'vip_gold' : 'default',
-          created_at: new Date().toISOString(),
-        };
-
-        mockStore.addUser(newUser);
-
-        // Assign user id to code record
-        const foundCode = mockStore.serverRegistrationCodes.find(
-          (c) => c.code.toLowerCase() === cleanCode.toLowerCase()
+        recordFailedAttempt(rateLimitKey);
+        return NextResponse.json(
+          { success: false, error: `Игрок @${cleanUsername} не найден. Проверьте правильность никнейма.` },
+          { status: 404 }
         );
-        if (foundCode) {
-          foundCode.usedByUserId = newUser.id;
-        }
+      }
+    }
 
-        // Add starter Christmas sticker
-        mockStore.addItemToInventory(newUser.id, 'reward-xmas-sticker', 1);
+    if (userRecord.is_blocked) {
+      return NextResponse.json({ success: false, error: 'Ваш аккаунт заблокирован администратором' }, { status: 403 });
+    }
 
-        // Add welcome notification
-        mockStore.addNotification({
-          userId: newUser.id,
-          type: 'system',
-          title: 'Добро пожаловать в Lucky UC! 🎄',
-          message: isVip
-            ? 'Вам начислен VIP-статус и стартовый баланс 5000 UC! Счастливого Нового года!'
-            : 'Вы успешно зарегистрированы в новогодней платформе Lucky UC! Ожидайте начисления спинов от Администратора.',
+    // Check if account already has a password set
+    const existingHash = userRecord.password_hash || userRecord.recovery_key_hash;
+
+    if (!existingHash) {
+      // FIRST LOGIN: Set password and authenticate immediately!
+      // (Правило 1: При первом входе пользователь вводит свой Nickname и Password)
+      if (enteredPassword.length < 3) {
+        return NextResponse.json(
+          { success: false, error: 'Пароль должен содержать минимум 3 символа' },
+          { status: 400 }
+        );
+      }
+
+      const passwordHash = await bcrypt.hash(enteredPassword, 10);
+      userRecord.password_hash = passwordHash;
+      userRecord.recovery_key_hash = passwordHash;
+
+      if (isServerSupabaseConfigured && supabaseServer) {
+        await supabaseServer
+          .from('users')
+          .update({
+            password_hash: passwordHash,
+            recovery_key_hash: passwordHash,
+          })
+          .eq('id', userRecord.id);
+      } else {
+        mockStore.updateUser(userRecord.id, {
+          password_hash: passwordHash,
+          recovery_key_hash: passwordHash,
         });
 
-        userRecord = newUser;
+        // Mark registration code record as used if matching
+        const foundCode = mockStore.serverRegistrationCodes?.find(
+          (c) => c.code.toLowerCase() === cleanUsername
+        );
+        if (foundCode) {
+          foundCode.isUsed = true;
+          foundCode.usedByUserId = userRecord.id;
+          foundCode.usedAt = new Date().toISOString();
+        }
+        mockStore.saveToFile();
       }
 
       clearRateLimit(rateLimitKey);
     } else {
-      // Login action
-      const rateLimitCheck = checkRateLimit(rateLimitKey);
-      if (!rateLimitCheck.allowed) {
-        return NextResponse.json({ success: false, error: rateLimitCheck.error }, { status: 429 });
+      // REPEAT LOGIN: Verify password
+      // (Правило 2: При повторном входе пользователь снова вводит только Nickname и Password)
+      let isKeyValid = false;
+      try {
+        isKeyValid = await bcrypt.compare(enteredPassword, existingHash);
+      } catch {}
+
+      if (!isKeyValid && existingHash === enteredPassword) {
+        isKeyValid = true;
       }
 
-      // Check special admin alias: 'admin' maps to 'lucky_admin' if user typed 'admin'
-      const lookupUsername = cleanUsername === 'admin' ? 'lucky_admin' : cleanUsername;
-
-      if (isServerSupabaseConfigured && supabaseServer) {
-        const { data: existingUser } = await supabaseServer
-          .from('users')
-          .select('*')
-          .ilike('username', lookupUsername)
-          .maybeSingle();
-
-        if (!existingUser) {
-          recordFailedAttempt(rateLimitKey);
-          return NextResponse.json(
-            { success: false, error: `Игрок @${cleanUsername} не найден. Зарегистрируйтесь!` },
-            { status: 404 }
-          );
-        }
-        userRecord = existingUser;
-      } else {
-        if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_DEV_STORE) {
-          return NextResponse.json(
-            { success: false, error: 'База данных Supabase не настроена на сервере' },
-            { status: 503 }
-          );
-        }
-
-        const found = mockStore.getUserByUsername(lookupUsername);
-        if (!found) {
-          recordFailedAttempt(rateLimitKey);
-          return NextResponse.json(
-            { success: false, error: `Игрок @${cleanUsername} не найден. Зарегистрируйтесь!` },
-            { status: 404 }
-          );
-        }
-        userRecord = found;
-      }
-
-      if (userRecord.is_blocked) {
-        return NextResponse.json({ success: false, error: 'Ваш аккаунт заблокирован администратором' }, { status: 403 });
-      }
-
-      // Verify password
-      let isPasswordValid = false;
-
-      // Special secure check for Administrator with environment variables
-      if (userRecord.is_admin) {
-        if (process.env.ADMIN_PASSWORD_HASH) {
-          isPasswordValid = await bcrypt.compare(password, process.env.ADMIN_PASSWORD_HASH);
-        } else if (process.env.ADMIN_PASSWORD) {
-          isPasswordValid = password === process.env.ADMIN_PASSWORD;
-        } else if (userRecord.password_hash) {
-          isPasswordValid = await bcrypt.compare(password, userRecord.password_hash);
-        }
-      } else {
-        if (userRecord.password_hash) {
-          isPasswordValid = await bcrypt.compare(password, userRecord.password_hash);
+      // Check optional env-configured admin credentials fallback if user is admin
+      if (!isKeyValid && userRecord.is_admin) {
+        if (ADMIN_PASSWORD && enteredPassword === ADMIN_PASSWORD) {
+          isKeyValid = true;
+        } else if (ADMIN_PASSWORD_HASH) {
+          try {
+            isKeyValid = await bcrypt.compare(enteredPassword, ADMIN_PASSWORD_HASH);
+          } catch {}
         }
       }
 
-      if (!isPasswordValid) {
+      if (!isKeyValid) {
         recordFailedAttempt(rateLimitKey);
         return NextResponse.json({ success: false, error: 'Неверный пароль' }, { status: 401 });
       }
 
       clearRateLimit(rateLimitKey);
-    }
-
-    if (!userRecord) {
-      return NextResponse.json({ success: false, error: 'Не удалось получить данные пользователя' }, { status: 500 });
     }
 
     if (!isServerSupabaseConfigured) {
@@ -392,6 +280,7 @@ export async function POST(request) {
 
     const sanitizedUser = { ...userRecord };
     delete sanitizedUser.password_hash;
+    delete sanitizedUser.recovery_key_hash;
     delete sanitizedUser.browser_pin;
     delete sanitizedUser.auth_token;
 
@@ -409,6 +298,7 @@ export async function POST(request) {
       greeting: `Добро пожаловать, ${userRecord.username}! 🎄`,
       isTelegram: false,
     });
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
 
     await setSessionCookie(sessionPayload, response);
 

@@ -55,7 +55,7 @@ export default function TitlesPage() {
               Зал Титулов
             </h1>
             <p className="text-xs text-zinc-400">
-              СОСУН, ВОЗДУХАН, КОРОЛЬ, КОРОЛЕВА, КИБОРГ, VIP
+              Эксклюзивные звания и PRO-EPIC титулы
             </p>
           </div>
         </div>
@@ -140,7 +140,8 @@ export default function TitlesPage() {
       {/* Rarity Filter Tabs */}
       <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
         {[
-          { id: 'all', label: 'Все титулы (6)' },
+          { id: 'all', label: `Все титулы (${TITLES_LIST.length})` },
+          { id: 'pro-epic', label: 'PRO-EPIC (5)', special: true },
           { id: 'rare', label: 'Редкие (2)' },
           { id: 'epic', label: 'Эпические (2)' },
           { id: 'mythic', label: 'Мифический (1)' },
@@ -153,7 +154,11 @@ export default function TitlesPage() {
               onClick={() => setSelectedRarity(tab.id)}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
                 isSelected
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                  ? tab.special
+                    ? 'bg-cyan-500/25 text-cyan-200 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)]'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+                  : tab.special
+                  ? 'bg-cyan-950/40 text-cyan-300 border-cyan-500/40 hover:border-cyan-400'
                   : 'bg-zinc-900/80 text-zinc-400 border-zinc-800 hover:text-zinc-200'
               }`}
             >
