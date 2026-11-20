@@ -456,6 +456,31 @@ export function UserDataProvider({ children }) {
     return null;
   }, []);
 
+  // Use consumable inventory item
+  const useInventoryItem = useCallback(
+    async (itemId, quantity = 1) => {
+      try {
+        const res = await fetch('/api/inventory/use', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemId, quantity }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          await syncProfile();
+          triggerHaptic('success');
+          return { success: true, ...data };
+        }
+        triggerHaptic('error');
+        return { success: false, error: data.error };
+      } catch (err) {
+        triggerHaptic('error');
+        return { success: false, error: err.message };
+      }
+    },
+    [syncProfile, triggerHaptic]
+  );
+
   // Total stats calculations
   const stats = useMemo(() => {
     const totalRewardsCount = inventory.reduce((acc, curr) => acc + (curr.quantity || 1), 0);
@@ -525,6 +550,7 @@ export function UserDataProvider({ children }) {
       buyShopItem,
       playSpin,
       checkDailySpins,
+      useInventoryItem,
       refreshData: syncProfile,
     }),
     [
@@ -555,6 +581,7 @@ export function UserDataProvider({ children }) {
       buyShopItem,
       playSpin,
       checkDailySpins,
+      useInventoryItem,
       syncProfile,
     ]
   );

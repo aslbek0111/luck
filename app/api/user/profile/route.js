@@ -81,7 +81,6 @@ export async function GET(request) {
           reward_id,
           rewards_catalog (
             id,
-            slug,
             name,
             category,
             rarity,
@@ -98,7 +97,7 @@ export async function GET(request) {
       if (invData) {
         rawInventory = invData.map((it) => {
           const cat = it.rewards_catalog || {};
-          const slugId = cat.slug || toSlugId(it.reward_id);
+          const slugId = toSlugId(it.reward_id) || cat.title_slug;
           return {
             id: slugId,
             rewardId: slugId,

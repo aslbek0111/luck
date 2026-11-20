@@ -58,14 +58,42 @@ const ICON_MAP = {
 };
 
 export default function InventoryPage() {
-  const { user, stats, inventory, activeTitle, equipTitle, unequipTitle, purchasesHistory } = useUserData();
+  const { user, stats, inventory, activeTitle, equipTitle, unequipTitle, purchasesHistory, useInventoryItem } = useUserData();
   const { triggerHaptic } = useTelegram();
 
   // Tabs: 'all' | 'titles' | 'gifts' | 'history'
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [equippingId, setEquippingId] = useState(null);
+  const [usingItemId, setUsingItemId] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Handle consumable item usage
+  const handleUseItem = async (item) => {
+    if (!item || usingItemId) return;
+    setUsingItemId(item.id);
+    try {
+      const res = await useInventoryItem(item.id, 1);
+      if (res.success) {
+        setToastMessage({
+          type: 'success',
+          text: res.message || `Предмет «${item.name}» успешно использован!`,
+        });
+      } else {
+        setToastMessage({
+          type: 'error',
+          text: res.error || 'Не удалось использовать предмет',
+        });
+      }
+    } catch (err) {
+      setToastMessage({
+        type: 'error',
+        text: err.message || 'Ошибка при использовании предмета',
+      });
+    } finally {
+      setUsingItemId(null);
+    }
+  };
 
   // Split inventory into titles and gifts
   const inventoryTitles = useMemo(() => {
@@ -390,13 +418,24 @@ export default function InventoryPage() {
                             </span>
                           </button>
                         ) : (
-                          <Link
-                            href={`/gifts?tab=send&item=${item.id}`}
-                            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition-all flex items-center gap-1"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                            <span>Подарить</span>
-                          </Link>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleUseItem(item)}
+                              disabled={usingItemId === item.id}
+                              type="button"
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>{usingItemId === item.id ? '...' : 'Использовать'}</span>
+                            </button>
+                            <Link
+                              href={`/gifts?tab=send&item=${item.id}`}
+                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition-all flex items-center gap-1"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              <span>Подарить</span>
+                            </Link>
+                          </div>
                         )}
                       </div>
                     </div>

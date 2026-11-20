@@ -53,7 +53,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Нельзя отправить подарок самому себе');
   END IF;
 
-  SELECT * INTO v_reward FROM rewards WHERE id = p_reward_id;
+  SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = p_reward_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'Предмет не найден в каталоге');
   END IF;
@@ -79,9 +79,9 @@ BEGIN
   END IF;
 
   -- Determine item type: functional vs decorative
-  v_is_spin := (v_reward.category = 'spins' OR v_reward.slug LIKE '%spin%');
-  v_is_uc := (v_reward.category = 'uc' OR v_reward.slug LIKE '%uc%');
-  v_is_coins := (v_reward.category = 'coins' OR v_reward.slug LIKE '%coins%');
+  v_is_spin := (v_reward.category = 'spins' OR COALESCE(v_reward.title_slug, '') LIKE '%spin%');
+  v_is_uc := (v_reward.category = 'uc' OR COALESCE(v_reward.title_slug, '') LIKE '%uc%');
+  v_is_coins := (v_reward.category = 'coins' OR COALESCE(v_reward.title_slug, '') LIKE '%coins%');
 
   IF v_is_spin THEN
     v_spins_to_add := COALESCE(NULLIF(v_reward.value, 0), 1) * p_quantity;

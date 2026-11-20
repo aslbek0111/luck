@@ -50,7 +50,7 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Нельзя отправить подарок самому себе');
   END IF;
 
-  SELECT * INTO v_reward FROM rewards WHERE id = p_reward_id;
+  SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = p_reward_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'Предмет не найден в каталоге');
   END IF;

@@ -72,7 +72,7 @@ export async function POST(request) {
     }
 
     if (isServerSupabaseConfigured && supabaseServer) {
-      // 1. Fetch user from Supabase
+      // 1. Fetch user to check daily 24h spin grant and calculate timer
       const { data: user, error: userErr } = await supabaseServer
         .from('users')
         .select('*')
@@ -92,17 +92,15 @@ export async function POST(request) {
       // Check and grant daily spins if 24 hours elapsed (for standard accounts)
       const nowMs = Date.now();
       const DAY_MS = 24 * 60 * 60 * 1000;
-      let userSpins = user.free_spins_balance || 0;
       let lastGrantMs = user.last_daily_spins_at ? new Date(user.last_daily_spins_at).getTime() : 0;
       let lastDailyAt = user.last_daily_spins_at;
 
       if (!isVipAdmin && (!user.last_daily_spins_at || nowMs - lastGrantMs >= DAY_MS)) {
-        userSpins = (user.free_spins_balance || 0) + 2;
         lastDailyAt = new Date(nowMs).toISOString();
         await supabaseServer
           .from('users')
           .update({
-            free_spins_balance: userSpins,
+            free_spins_balance: (user.free_spins_balance || 0) + 2,
             last_daily_spins_at: lastDailyAt,
             updated_at: lastDailyAt,
           })
@@ -113,166 +111,51 @@ export async function POST(request) {
       const secondsRemaining = isVipAdmin ? 0 : Math.max(0, Math.ceil((nextGrantMs - nowMs) / 1000));
       const nextDailySpinsAt = isVipAdmin ? null : new Date(nextGrantMs).toISOString();
 
-      if (!isVipAdmin && userSpins <= 0) {
+      // Authoritative roulette reward selection (55% coins, 45% gifts & souvenirs)
+      const wonReward = selectRouletteReward();
+      const dbRewardId = toDbUuid(wonReward.id) || wonReward.id;
+
+      // Atomic spin execution in Supabase PostgreSQL
+      const { data: rpcResult, error: rpcError } = await supabaseServer.rpc('play_spin_atomic', {
+        p_user_id: userId,
+        p_reward_id: dbRewardId,
+      });
+
+      if (rpcError) {
+        console.error('Supabase play_spin_atomic error:', rpcError);
+        return NextResponse.json(
+          { success: false, error: rpcError.message || 'Ошибка базы данных при прокрутке Колеса' },
+          { status: 500 }
+        );
+      }
+
+      if (!rpcResult || !rpcResult.success) {
         return NextResponse.json({
           success: false,
-          error: 'У вас закончились бесплатные вращения на сегодня! Следующие 2 бесплатных спина будут доступны через 24 часа.',
+          error: rpcResult?.error || 'У вас закончились бесплатные вращения на сегодня!',
           seconds_until_next_spins: secondsRemaining,
           next_daily_spins_at: nextDailySpinsAt,
         }, { status: 400 });
       }
 
-      let newSpinsLeft = userSpins;
-      const newTotalSpins = (user.spins_count || 0) + 1;
-
-      if (!isVipAdmin) {
-        // Atomic decrement for standard players
-        const { data: deductedUsers, error: deductErr } = await supabaseServer
-          .from('users')
-          .update({
-            free_spins_balance: userSpins - 1,
-            spins_count: newTotalSpins,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', user.id)
-          .gt('free_spins_balance', 0)
-          .select();
-
-        if (deductErr || !deductedUsers || deductedUsers.length === 0) {
-          return NextResponse.json({
-            success: false,
-            error: 'У вас закончились бесплатные вращения на сегодня! Ожидайте начисления следующих 2 спинов.',
-            seconds_until_next_spins: secondsRemaining,
-            next_daily_spins_at: nextDailySpinsAt,
-          }, { status: 400 });
-        }
-        newSpinsLeft = deductedUsers[0].free_spins_balance;
-      } else {
-        // For VIP Admin: balance remains unlimited
-        await supabaseServer
-          .from('users')
-          .update({
-            spins_count: newTotalSpins,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', user.id);
-      }
-
-      // Authoritative roulette reward selection (55% coins, 45% gifts & souvenirs)
-      const wonReward = selectRouletteReward();
-      const dbRewardId = toDbUuid(wonReward.id) || wonReward.id;
-
-      let newUc = user.total_uc || 0;
-      let newPop = user.total_popularity || 0;
-      let newCoins = typeof user.coins_balance === 'number' ? user.coins_balance : 0;
-      let newPoints = typeof user.points_balance === 'number' ? user.points_balance : newCoins;
-      let finalSpinsLeft = isVipAdmin ? 999999 : newSpinsLeft;
-
-      if (!isVipAdmin && wonReward.category === 'spins') {
-        finalSpinsLeft += wonReward.value;
-      } else if (wonReward.category === 'popularity') {
-        newPop += wonReward.value;
-        const spinTxRef = `spin-${user.id}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-        try {
-          await supabaseServer.from('popularity_transactions').insert({
-            user_id: user.id,
-            amount: wonReward.value,
-            source: 'spin',
-            description: `Выигрыш на Колесе: ${wonReward.name}`,
-            reference_id: spinTxRef,
-          });
-        } catch {}
-      } else if (wonReward.category === 'uc') {
-        newUc += wonReward.value;
-      } else if (wonReward.category === 'coins' || wonReward.id.startsWith('reward-coins-')) {
-        newCoins += wonReward.value;
-        newPoints += wonReward.value;
-      }
-
-      const nowIso = new Date().toISOString();
-      await supabaseServer
-        .from('users')
-        .update({
-          free_spins_balance: isVipAdmin ? 999999 : finalSpinsLeft,
-          total_uc: newUc,
-          total_popularity: newPop,
-          popularity_updated_at: wonReward.category === 'popularity' ? nowIso : (user.popularity_updated_at || nowIso),
-          coins_balance: newCoins,
-          points_balance: newPoints,
-          updated_at: nowIso,
-        })
-        .eq('id', user.id);
-
-      // Add to inventory
-      const { data: existingInv } = await supabaseServer
-        .from('user_inventory')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('reward_id', dbRewardId)
-        .maybeSingle();
-
-      if (existingInv) {
-        await supabaseServer
-          .from('user_inventory')
-          .update({ quantity: existingInv.quantity + 1, updated_at: nowIso })
-          .eq('id', existingInv.id);
-      } else {
-        await supabaseServer.from('user_inventory').insert({
-          user_id: user.id,
-          reward_id: dbRewardId,
-          quantity: 1,
-        });
-      }
-
-      // Log spin
-      await supabaseServer.from('spins_history').insert({
-        user_id: user.id,
-        reward_id: dbRewardId,
-        reward_name: wonReward.name,
-        reward_rarity: wonReward.rarity,
-        reward_value: wonReward.value || 0,
-      });
-
-      // Public event & notification
-      if (['rare', 'epic', 'mythic', 'legendary', 'pro-epic'].includes(wonReward.rarity) || wonReward.category === 'coins' || wonReward.category === 'popularity') {
-        await supabaseServer.from('public_events').insert({
-          user_id: user.id,
-          username: '@' + (user.username || 'Игрок'),
-          reward_id: dbRewardId,
-          reward_name: wonReward.name,
-          reward_rarity: wonReward.rarity,
-          reward_category: wonReward.category,
-          event_type: 'reward_received',
-        });
-
-        await supabaseServer.from('notifications').insert({
-          user_id: user.id,
-          type: 'spin_win',
-          title: wonReward.category === 'coins'
-            ? `Выигрыш ${wonReward.name}! 🪙`
-            : wonReward.category === 'popularity'
-            ? `Выигрыш ${wonReward.name}! 🔥`
-            : 'Новогодний выигрыш! 🎄',
-          message: wonReward.category === 'coins'
-            ? `Поздравляем! Вы выиграли «${wonReward.name}» на Колесе! Монеты зачислены на ваш баланс.`
-            : wonReward.category === 'popularity'
-            ? `Поздравляем! Вы выиграли «${wonReward.name}»! Очки популярности моментально зачислены в таблицу лидеров.`
-            : `Поздравляем! Вы выиграли «${wonReward.name}» на Рождественском Колесе!`,
-        });
-      }
+      const formattedReward = {
+        ...wonReward,
+        ...(rpcResult.reward || {}),
+        id: wonReward.id, // Preserve client slug format
+      };
 
       return NextResponse.json({
         success: true,
-        reward: wonReward,
-        spins_left: isVipAdmin ? 999999 : finalSpinsLeft,
-        total_spins: newTotalSpins,
-        total_uc: newUc,
-        total_popularity: newPop,
-        coins_balance: newCoins,
-        coinsBalance: newCoins,
-        points_balance: newPoints,
-        pointsBalance: newPoints,
-        is_vip_admin: isVipAdmin,
+        reward: formattedReward,
+        spins_left: rpcResult.spins_left,
+        total_spins: rpcResult.total_spins,
+        total_uc: rpcResult.total_uc,
+        total_popularity: rpcResult.total_popularity,
+        coins_balance: rpcResult.coins_balance,
+        coinsBalance: rpcResult.coins_balance,
+        points_balance: rpcResult.points_balance,
+        pointsBalance: rpcResult.points_balance,
+        is_vip_admin: rpcResult.is_vip_admin,
         seconds_until_next_spins: secondsRemaining,
         next_daily_spins_at: nextDailySpinsAt,
       });

@@ -482,7 +482,7 @@ export default function SendGiftModal({
                     setRecipientInput(e.target.value);
                     setErrorMessage('');
                   }}
-                  placeholder="Например: Frost82B, Snow24A..."
+                  placeholder="Введите никнейм игрока..."
                   className="w-full pl-10 pr-4 py-2.5 bg-black/40 border border-white/15 focus:border-amber-400 rounded-xl text-sm text-white placeholder-white/30 focus:outline-none focus:ring-1 focus:ring-amber-400 transition-colors"
                 />
               </div>

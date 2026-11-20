@@ -93,8 +93,8 @@ async function runAudit() {
   // -------------------------------------------------------------------------
   console.log('\n🗺️ SECTION 2: Catalog Data & Database UUID Mapping');
   assert('2.1 Total catalog items equals exactly 40+ rewards & titles', REWARDS_CATALOG.length >= 40);
-  assert('2.2 ITEM_UUID_MAP contains exactly 40 items', Object.keys(ITEM_UUID_MAP).length === 40);
-  assert('2.3 UUID_TO_SLUG_MAP contains exactly 40 reverse mappings', Object.keys(UUID_TO_SLUG_MAP).length === 40);
+  assert('2.2 ITEM_UUID_MAP contains exactly 49 items (1:1 bijection)', Object.keys(ITEM_UUID_MAP).length === 49);
+  assert('2.3 UUID_TO_SLUG_MAP contains exactly 49 reverse mappings', Object.keys(UUID_TO_SLUG_MAP).length === 49);
 
   // Verify all 15 Christmas rewards map to their database UUIDs
   const miracleBoxUuid = toDbUuid('reward-xmas-miracle-box');
