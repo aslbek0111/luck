@@ -29,13 +29,27 @@ export async function POST(request) {
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ success: true, user: updatedUser, activeTitle: null });
+      const sanitized = updatedUser ? { ...updatedUser } : null;
+      if (sanitized) {
+        delete sanitized.password_hash;
+        delete sanitized.browser_pin;
+        delete sanitized.auth_token;
+      }
+
+      return NextResponse.json({ success: true, user: sanitized, activeTitle: null });
     } else {
       if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_DEV_STORE) {
         return NextResponse.json({ success: false, error: 'База данных Supabase не настроена на сервере' }, { status: 503 });
       }
       const updated = mockStore.unequipTitle(userId);
-      return NextResponse.json({ success: true, user: updated, activeTitle: null });
+      const sanitized = updated ? { ...updated } : null;
+      if (sanitized) {
+        delete sanitized.password_hash;
+        delete sanitized.browser_pin;
+        delete sanitized.auth_token;
+      }
+
+      return NextResponse.json({ success: true, user: sanitized, activeTitle: null });
     }
   } catch (err) {
     console.error('API /titles/unequip error:', err);

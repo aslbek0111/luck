@@ -296,7 +296,7 @@ export function UserDataProvider({ children }) {
       } catch (err) {
         console.warn('Equip title notice:', err);
       }
-      syncProfile();
+      await syncProfile();
       triggerHaptic('success');
     },
     [currentUser, syncProfile, triggerHaptic]
@@ -317,7 +317,7 @@ export function UserDataProvider({ children }) {
     } catch (err) {
       console.warn('Unequip title notice:', err);
     }
-    syncProfile();
+    await syncProfile();
     triggerHaptic('medium');
   }, [currentUser, syncProfile, triggerHaptic]);
 
