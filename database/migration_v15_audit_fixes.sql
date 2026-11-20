@@ -46,11 +46,20 @@ DECLARE
   v_is_uc BOOLEAN := FALSE;
   v_is_coins BOOLEAN := FALSE;
 BEGIN
+  -- Authenticated caller can only send gifts from their own account
+  IF auth.uid() IS NOT NULL AND auth.role() = 'authenticated' AND auth.uid() <> p_sender_id THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Вы можете отправлять подарки только со своего аккаунта');
+  END IF;
+
   IF p_quantity < 1 THEN
     RETURN jsonb_build_object('success', false, 'error', 'Количество должно быть не менее 1');
   END IF;
 
-  SELECT * INTO v_sender FROM public.users WHERE id = p_sender_id;
+  IF p_message IS NOT NULL AND length(p_message) > 500 THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Длина сообщения не должна превышать 500 символов');
+  END IF;
+
+  SELECT * INTO v_sender FROM public.users WHERE id = p_sender_id FOR UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'Отправитель не найден');
   END IF;
@@ -68,10 +77,14 @@ BEGIN
     RETURN jsonb_build_object('success', false, 'error', 'Нельзя отправить подарок самому себе');
   END IF;
 
-  -- Fixed table reference: public.rewards_catalog instead of rewards
-  SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = p_reward_id;
+  IF v_recipient.is_blocked THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Получатель заблокирован');
+  END IF;
+
+  -- Fixed table reference: public.rewards_catalog instead of rewards (must be active)
+  SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = p_reward_id AND is_active = TRUE;
   IF NOT FOUND THEN
-    RETURN jsonb_build_object('success', false, 'error', 'Предмет не найден в каталоге');
+    RETURN jsonb_build_object('success', false, 'error', 'Предмет не найден или недоступен в каталоге');
   END IF;
 
   -- Verify sender has item in inventory
@@ -141,11 +154,11 @@ BEGIN
   END IF;
 
   -- Record gift in history
-  INSERT INTO gifts_history (sender_id, recipient_id, reward_id, quantity, status, message, source, cost_coins, created_at)
+  INSERT INTO public.gifts_history (sender_id, recipient_id, reward_id, quantity, status, message, source, cost_coins, created_at)
   VALUES (p_sender_id, v_recipient.id, p_reward_id, p_quantity, 'completed', p_message, 'inventory', 0, NOW());
 
   -- Create notification for recipient
-  INSERT INTO notifications (user_id, type, title, message, data, created_at)
+  INSERT INTO public.notifications (user_id, type, title, message, data, created_at)
   VALUES (
     v_recipient.id,
     'gift_received',
@@ -196,10 +209,16 @@ DECLARE
     v_total_cost INTEGER;
     v_is_admin BOOLEAN;
     v_item_type TEXT;
+    v_current_balance INTEGER;
     v_new_coins INTEGER;
     v_new_points INTEGER;
     v_inv_record RECORD;
 BEGIN
+    -- Security: Authenticated caller can only purchase items for their own account
+    IF auth.uid() IS NOT NULL AND auth.role() = 'authenticated' AND auth.uid() <> p_user_id THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Вы можете совершать покупки только для своего аккаунта');
+    END IF;
+
     -- 1. Input validation
     IF p_quantity IS NULL OR p_quantity <= 0 THEN
         RETURN jsonb_build_object('success', false, 'error', 'Недопустимое количество предметов для покупки');
@@ -239,14 +258,15 @@ BEGIN
     -- 4. Locate reward in rewards_catalog with complete fallback hierarchy
     SELECT * INTO v_reward 
     FROM public.rewards_catalog 
-    WHERE LOWER(COALESCE(title_slug, '')) = LOWER(p_item_slug)
+    WHERE (LOWER(COALESCE(title_slug, '')) = LOWER(p_item_slug)
        OR LOWER(COALESCE(title_slug, '')) = LOWER(REPLACE(p_item_slug, 'title-', ''))
        OR LOWER(id::text) = LOWER(p_item_slug)
-       OR LOWER(name) = LOWER(p_item_slug)
+       OR LOWER(name) = LOWER(p_item_slug))
+      AND is_active = TRUE
     LIMIT 1;
 
     IF NOT FOUND THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Товар не найден в каталоге наград');
+        RETURN jsonb_build_object('success', false, 'error', 'Товар не найден или недоступен для покупки в каталоге наград');
     END IF;
 
     -- Check if item is categorized under 'uc' or named 'VIP'
@@ -299,25 +319,28 @@ BEGIN
         v_new_points := COALESCE(v_user.points_balance, 999999);
     ELSE
         v_total_cost := v_unit_cost * p_quantity;
-        v_new_coins := COALESCE(v_user.coins_balance, v_user.points_balance, 0);
+        -- Handle NULL balances safely: never propagate NULL or NaN
+        v_current_balance := COALESCE(v_user.coins_balance, v_user.points_balance, 0);
 
-        IF v_new_coins < v_total_cost THEN
+        IF v_current_balance < v_total_cost THEN
             RETURN jsonb_build_object(
                 'success', false, 
-                'error', 'Недостаточно Coins для покупки. Требуется: ' || v_total_cost || ', доступно: ' || v_new_coins,
+                'error', 'Недостаточно Coins для покупки. Требуется: ' || v_total_cost || ', доступно: ' || v_current_balance,
                 'required_coins', v_total_cost,
-                'current_coins', v_new_coins,
+                'current_coins', v_current_balance,
                 'required_points', v_total_cost,
-                'current_points', v_new_coins
+                'current_points', v_current_balance
             );
         END IF;
 
+        v_new_coins := v_current_balance - v_total_cost;
+        v_new_points := v_new_coins;
+
         UPDATE public.users 
-        SET coins_balance = coins_balance - v_total_cost,
-            points_balance = points_balance - v_total_cost,
+        SET coins_balance = v_new_coins,
+            points_balance = v_new_points,
             updated_at = NOW()
-        WHERE id = v_user.id
-        RETURNING coins_balance, points_balance INTO v_new_coins, v_new_points;
+        WHERE id = v_user.id;
     END IF;
 
     -- 6. Add purchased item to user_inventory
@@ -421,6 +444,11 @@ DECLARE
     v_pop_to_add INTEGER := 0;
     v_granted_desc TEXT := '';
 BEGIN
+    -- Security: Authenticated caller can only use items from their own account
+    IF auth.uid() IS NOT NULL AND auth.role() = 'authenticated' AND auth.uid() <> p_user_id THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Вы можете использовать предметы только со своего аккаунта');
+    END IF;
+
     IF p_quantity IS NULL OR p_quantity <= 0 THEN
         RETURN jsonb_build_object('success', false, 'error', 'Количество должно быть не менее 1');
     END IF;
@@ -437,18 +465,28 @@ BEGIN
     -- Locate reward in catalog
     SELECT * INTO v_reward 
     FROM public.rewards_catalog 
-    WHERE LOWER(COALESCE(title_slug, '')) = LOWER(p_item_identifier)
+    WHERE (LOWER(COALESCE(title_slug, '')) = LOWER(p_item_identifier)
        OR LOWER(COALESCE(title_slug, '')) = LOWER(REPLACE(p_item_identifier, 'title-', ''))
        OR LOWER(id::text) = LOWER(p_item_identifier)
-       OR LOWER(name) = LOWER(p_item_identifier)
+       OR LOWER(name) = LOWER(p_item_identifier))
+      AND is_active = TRUE
     LIMIT 1;
 
     IF NOT FOUND THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Предмет не найден в каталоге');
+        RETURN jsonb_build_object('success', false, 'error', 'Предмет не найден или недоступен в каталоге');
     END IF;
 
     IF v_reward.is_title OR v_reward.category = 'titles' THEN
         RETURN jsonb_build_object('success', false, 'error', 'Титулы экипируются в профиле, а не расходуются');
+    END IF;
+
+    -- Strictly allow only explicitly supported consumable items (spins, uc, coins, popularity)
+    IF v_reward.category NOT IN ('spins', 'uc', 'coins', 'popularity')
+       AND COALESCE(v_reward.title_slug, '') NOT LIKE '%spin%'
+       AND COALESCE(v_reward.title_slug, '') NOT LIKE '%uc%'
+       AND COALESCE(v_reward.title_slug, '') NOT LIKE '%coins%'
+       AND COALESCE(v_reward.title_slug, '') NOT LIKE '%pop%' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Данный предмет является коллекционным подарком и не может быть использован как расходуемый');
     END IF;
 
     -- Lock and check user inventory
@@ -492,7 +530,7 @@ BEGIN
         v_coins_to_add := COALESCE(v_reward.value, 0) * p_quantity;
         UPDATE public.users 
         SET coins_balance = COALESCE(coins_balance, 0) + v_coins_to_add,
-            points_balance = COALESCE(points_balance, 0) + v_coins_to_add,
+            points_balance = COALESCE(points_balance, coins_balance, 0) + v_coins_to_add,
             updated_at = NOW()
         WHERE id = p_user_id;
         v_granted_desc := '+' || v_coins_to_add || ' Монет';
@@ -508,16 +546,6 @@ BEGIN
 
         INSERT INTO public.popularity_transactions (user_id, amount, source, description, reference_id, created_at)
         VALUES (p_user_id, v_pop_to_add, 'inventory_use', 'Использован предмет: ' || v_reward.name, 'use-' || gen_random_uuid()::text, NOW());
-
-    ELSE
-        -- Mystery gift box / miracle box / souvenir activation (converts to value in coins or starter coin bonus)
-        v_coins_to_add := GREATEST(50, COALESCE(v_reward.value, 50)) * p_quantity;
-        UPDATE public.users 
-        SET coins_balance = COALESCE(coins_balance, 0) + v_coins_to_add,
-            points_balance = COALESCE(points_balance, 0) + v_coins_to_add,
-            updated_at = NOW()
-        WHERE id = p_user_id;
-        v_granted_desc := '+' || v_coins_to_add || ' Монет из подарка';
     END IF;
 
     -- Record in notifications
@@ -563,6 +591,10 @@ $$;
 -- ------------------------------------------------------------------------------
 -- 5. UPGRADE play_spin_atomic (Atomic Roulette Spin & Coin/Item Handling)
 -- ------------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.play_spin_atomic();
+DROP FUNCTION IF EXISTS public.play_spin_atomic(UUID);
+DROP FUNCTION IF EXISTS public.play_spin_atomic(UUID, UUID);
+
 CREATE OR REPLACE FUNCTION public.play_spin_atomic(
     p_user_id UUID,
     p_reward_id UUID DEFAULT NULL
@@ -584,6 +616,16 @@ DECLARE
     v_new_points INTEGER;
     v_now TIMESTAMPTZ := NOW();
 BEGIN
+    -- Security: Authenticated caller can only spin for their own account
+    IF auth.uid() IS NOT NULL AND auth.role() = 'authenticated' AND auth.uid() <> p_user_id THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Вы можете вращать колесо только со своего аккаунта');
+    END IF;
+
+    -- Security: If invoked directly by authenticated user (bypassing backend), ignore client-chosen reward
+    IF auth.role() = 'authenticated' THEN
+        p_reward_id := NULL;
+    END IF;
+
     -- 1. Fetch user for update
     SELECT * INTO v_user FROM public.users WHERE id = p_user_id FOR UPDATE;
     IF NOT FOUND THEN
@@ -603,9 +645,9 @@ BEGIN
         END IF;
     END IF;
 
-    -- 3. Resolve reward: either passed as parameter or selected via weighted RNG
+    -- 3. Resolve reward: either passed as parameter or selected via weighted RNG (only active items)
     IF p_reward_id IS NOT NULL THEN
-        SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = p_reward_id;
+        SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = p_reward_id AND is_active = TRUE;
     END IF;
 
     IF v_reward.id IS NULL THEN
@@ -613,40 +655,45 @@ BEGIN
         IF v_rand < 55.0 THEN
             -- 55% Coins drop (25, 50, 75, 125 coins)
             IF v_rand < 28.0 THEN
-                SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000051';
+                SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000051' AND is_active = TRUE;
             ELSIF v_rand < 44.0 THEN
-                SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000052';
+                SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000052' AND is_active = TRUE;
             ELSIF v_rand < 52.0 THEN
-                SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000053';
+                SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000053' AND is_active = TRUE;
             ELSE
-                SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000054';
+                SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000054' AND is_active = TRUE;
             END IF;
         ELSE
             -- 45% Other catalog rewards
             IF v_rand < 75.0 THEN
-                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'common' AND category <> 'coins' AND is_title = FALSE ORDER BY random() LIMIT 1;
+                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'common' AND category <> 'coins' AND is_title = FALSE AND is_active = TRUE ORDER BY random() LIMIT 1;
             ELSIF v_rand < 87.0 THEN
-                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'uncommon' AND category <> 'coins' AND is_title = FALSE ORDER BY random() LIMIT 1;
+                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'uncommon' AND category <> 'coins' AND is_title = FALSE AND is_active = TRUE ORDER BY random() LIMIT 1;
             ELSIF v_rand < 95.0 THEN
-                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'rare' AND category <> 'coins' AND is_title = FALSE ORDER BY random() LIMIT 1;
+                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'rare' AND category <> 'coins' AND is_title = FALSE AND is_active = TRUE ORDER BY random() LIMIT 1;
             ELSIF v_rand < 99.0 THEN
-                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'epic' AND category <> 'coins' AND is_title = FALSE ORDER BY random() LIMIT 1;
+                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'epic' AND category <> 'coins' AND is_title = FALSE AND is_active = TRUE ORDER BY random() LIMIT 1;
             ELSE
-                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity IN ('legendary', 'mythic') AND is_title = FALSE ORDER BY random() LIMIT 1;
+                SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity IN ('legendary', 'mythic') AND is_title = FALSE AND is_active = TRUE ORDER BY random() LIMIT 1;
             END IF;
         END IF;
     END IF;
 
-    -- Ultimate fallback
+    -- Ultimate fallback: any active non-title reward
     IF v_reward.id IS NULL THEN
-        SELECT * INTO v_reward FROM public.rewards_catalog WHERE is_active = TRUE ORDER BY random() LIMIT 1;
+        SELECT * INTO v_reward FROM public.rewards_catalog WHERE is_active = TRUE AND is_title = FALSE ORDER BY random() LIMIT 1;
     END IF;
 
-    -- 4. Calculate new balances
+    -- Guard: If reward could not be selected, safely abort WITHOUT consuming spins or altering state
+    IF v_reward.id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Каталог наград пуст или недоступен');
+    END IF;
+
+    -- 4. Calculate new balances safely (NULL resistant)
     v_new_uc := COALESCE(v_user.total_uc, 0);
     v_new_pop := COALESCE(v_user.total_popularity, 0);
-    v_new_coins := COALESCE(v_user.coins_balance, 0);
-    v_new_points := COALESCE(v_user.points_balance, v_new_coins);
+    v_new_coins := COALESCE(v_user.coins_balance, v_user.points_balance, 0);
+    v_new_points := v_new_coins;
 
     IF v_is_vip_admin THEN
         v_new_spins := COALESCE(v_user.free_spins_balance, 999999);
@@ -661,7 +708,7 @@ BEGIN
         END IF;
     ELSIF v_reward.category = 'coins' OR COALESCE(v_reward.title_slug, '') LIKE '%coins%' THEN
         v_new_coins := v_new_coins + COALESCE(v_reward.value, 0);
-        v_new_points := v_new_points + COALESCE(v_reward.value, 0);
+        v_new_points := v_new_coins;
     ELSIF v_reward.category = 'uc' OR COALESCE(v_reward.title_slug, '') LIKE '%uc%' THEN
         v_new_uc := v_new_uc + COALESCE(v_reward.value, 0);
     ELSIF v_reward.category = 'popularity' OR COALESCE(v_reward.title_slug, '') LIKE '%pop%' THEN
@@ -688,7 +735,7 @@ BEGIN
         updated_at = v_now
     WHERE id = v_user.id;
 
-    -- Add spin history record
+    -- Add spin history record (guaranteed non-null reward_id)
     INSERT INTO public.spins_history (user_id, reward_id, reward_name, reward_rarity, reward_value, created_at)
     VALUES (v_user.id, v_reward.id, v_reward.name, v_reward.rarity, COALESCE(v_reward.value, 0), v_now);
 
@@ -755,7 +802,12 @@ $$;
 -- ------------------------------------------------------------------------------
 -- 6. PERMISSIONS & GRANTS
 -- ------------------------------------------------------------------------------
-GRANT EXECUTE ON FUNCTION public.send_player_gift_with_message_atomic TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.purchase_item_atomic TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.use_inventory_item_atomic TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.play_spin_atomic(uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.send_player_gift_with_message_atomic(UUID, TEXT, UUID, INTEGER, TEXT) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.purchase_item_atomic(UUID, TEXT, INTEGER) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.use_inventory_item_atomic(UUID, TEXT, INTEGER) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.play_spin_atomic(UUID, UUID) FROM PUBLIC, anon;
+
+GRANT EXECUTE ON FUNCTION public.send_player_gift_with_message_atomic(UUID, TEXT, UUID, INTEGER, TEXT) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.purchase_item_atomic(UUID, TEXT, INTEGER) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.use_inventory_item_atomic(UUID, TEXT, INTEGER) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.play_spin_atomic(UUID, UUID) TO authenticated, service_role;

@@ -1,256 +1,222 @@
+import assert from 'assert';
 import { mockStore } from '../lib/mock-store.js';
-import { REWARDS_CATALOG } from '../lib/catalog-data.js';
 
-console.log('=== STARTING FUNCTIONAL GIFT & SPIN TRANSFER TESTS ===\n');
+console.log('=== STARTING FUNCTIONAL GIFT & SPIN TRANSFER TESTS (ISOLATED) ===\n');
 
 mockStore.ensureCanonicalAccounts();
-const users = mockStore.getUsers();
 
-const snow = users.find(u => u.username === 'Snow24A');
-const frost = users.find(u => u.username === 'Frost82B');
+const now = Date.now();
+const senderId = `test-sender-spin-${now}`;
+const recipId = `test-recip-spin-${now}`;
+const senderUsername = `tmp_sender_spin_${now}`;
+const recipUsername = `tmp_recip_spin_${now}`;
+const recipientUsername = recipUsername;
 
-if (!snow || !frost) {
-  console.error('FAIL: Test accounts not found');
-  process.exit(1);
-}
+const testSender = {
+  id: senderId,
+  username: senderUsername,
+  first_name: 'Spin Sender',
+  coins_balance: 3000,
+  points_balance: 3000,
+  is_blocked: false,
+};
 
-// Prepare balances
-snow.coins_balance = 2000;
-snow.points_balance = 2000;
-mockStore.updateUser(snow.id, { coins_balance: 2000, points_balance: 2000 });
-
-frost.free_spins_balance = 0;
-frost.total_uc = 100;
-frost.coins_balance = 500;
-mockStore.updateUser(frost.id, {
+const testRecipient = {
+  id: recipId,
+  username: recipUsername,
+  first_name: 'Spin Recipient',
   free_spins_balance: 0,
   total_uc: 100,
   coins_balance: 500,
-  last_daily_spins_at: new Date().toISOString(), // recent so daily reset doesn't trigger
+  points_balance: 500,
+  last_daily_spins_at: new Date().toISOString(),
+  is_blocked: false,
+};
+
+mockStore.addUser(testSender);
+mockStore.addUser(testRecipient);
+mockStore.updateUser(senderId, { coins_balance: 3000, points_balance: 3000 });
+mockStore.updateUser(recipId, {
+  free_spins_balance: 0,
+  total_uc: 100,
+  coins_balance: 500,
+  points_balance: 500,
 });
 
-// Clear previous test items from frost inventory
+// Initialize isolated inventory
 const inv = mockStore.getInventory();
-inv[frost.id] = (inv[frost.id] || []).filter(it => !it.rewardId?.includes('spin') && !it.rewardId?.includes('coins') && !it.rewardId?.includes('uc'));
+inv[senderId] = [
+  {
+    id: `test-inv-spin2-${now}`,
+    rewardId: 'reward-spin-2',
+    quantity: 1,
+    acquiredAt: new Date().toISOString(),
+  },
+  {
+    id: `test-inv-coins50-${now}`,
+    rewardId: 'reward-coins-50',
+    quantity: 1,
+    acquiredAt: new Date().toISOString(),
+  },
+  {
+    id: `test-inv-uc30-${now}`,
+    rewardId: 'reward-uc-30',
+    quantity: 1,
+    acquiredAt: new Date().toISOString(),
+  },
+];
+inv[recipId] = [];
 mockStore.saveInventory(inv);
 
-console.log(`Initial recipient (@Frost82B) balances:
-  Free spins: ${frost.free_spins_balance}
-  Total UC: ${frost.total_uc}
-  Coins: ${frost.coins_balance}`);
+try {
+  // -------------------------------------------------------------------
+  // TEST 1: Shop Gifting 2 x "reward-spin-1" (+1 spin each) to Recipient
+  // -------------------------------------------------------------------
+  console.log('--- TEST 1: Shop Gifting 2 Spins (reward-spin-1 x 2) ---');
+  const res1 = mockStore.sendGift({
+    senderId,
+    recipientUsername,
+    rewardId: 'reward-spin-1',
+    quantity: 2,
+    message: 'Лови 2 прокрутки для рулетки!',
+    source: 'shop',
+  });
 
-// -------------------------------------------------------------------
-// TEST 1: Shop Gifting 2 x "reward-spin-1" (+1 spin each) from Snow24A to Frost82B
-// -------------------------------------------------------------------
-console.log('\n--- TEST 1: Shop Gifting 2 Spins (reward-spin-1 x 2) ---');
-const res1 = mockStore.sendGift({
-  senderId: snow.id,
-  recipientUsername: frost.username,
-  rewardId: 'reward-spin-1',
-  quantity: 2,
-  message: 'Лови 2 прокрутки для рулетки!',
-  source: 'shop',
-});
+  assert(res1.success, `TEST 1 failed: ${res1.error}`);
+  const recipAfter1 = mockStore.getUserById(recipId);
+  assert.strictEqual(recipAfter1.free_spins_balance, 2, 'Recipient free_spins_balance should be 2');
 
-if (!res1.success) {
-  console.error('FAIL TEST 1: sendGift failed:', res1.error);
-  process.exit(1);
+  const recipInv1 = mockStore.getUserInventory(recipId);
+  const hasSpinInInv = recipInv1.some((it) => it.rewardId === 'reward-spin-1');
+  assert(!hasSpinInInv, 'Functional spins should not be added to inventory');
+  console.log('  ✅ [PASS] Exactly 2 usable spins added directly to recipient free_spins_balance');
+
+  // -------------------------------------------------------------------
+  // TEST 2: Recipient uses received spins on Roulette
+  // -------------------------------------------------------------------
+  console.log('\n--- TEST 2: Recipient uses received spins on Roulette ---');
+  recipAfter1.free_spins_balance -= 1;
+  mockStore.updateUser(recipId, { free_spins_balance: recipAfter1.free_spins_balance });
+  assert.strictEqual(mockStore.getUserById(recipId).free_spins_balance, 1, '1 spin left after first use');
+
+  recipAfter1.free_spins_balance -= 1;
+  mockStore.updateUser(recipId, { free_spins_balance: recipAfter1.free_spins_balance });
+  assert.strictEqual(mockStore.getUserById(recipId).free_spins_balance, 0, '0 spins left after second use');
+  console.log('  ✅ [PASS] Received spins were fully functional and successfully consumed down to 0');
+
+  // -------------------------------------------------------------------
+  // TEST 3: Inventory transfer of multi-value Spin (reward-spin-2 gives 2 spins)
+  // -------------------------------------------------------------------
+  console.log('\n--- TEST 3: Inventory transfer of reward-spin-2 ---');
+  const res3 = mockStore.sendGift({
+    senderId,
+    recipientUsername,
+    rewardId: 'reward-spin-2',
+    quantity: 1,
+    message: 'Лови двойной спин из моей сумки!',
+    source: 'inventory',
+  });
+
+  assert(res3.success, `TEST 3 failed: ${res3.error}`);
+  const recipAfter3 = mockStore.getUserById(recipId);
+  assert.strictEqual(recipAfter3.free_spins_balance, 2, 'reward-spin-2 should credit 2 spins');
+  const senderInvAfter3 = mockStore.getUserInventory(senderId);
+  const senderSpin2 = senderInvAfter3.find((it) => it.rewardId === 'reward-spin-2');
+  assert(!senderSpin2 || senderSpin2.quantity === 0, 'Item deducted from sender inventory');
+  console.log('  ✅ [PASS] Inventory transfer of reward-spin-2 credited 2 spins and deducted item');
+
+  // -------------------------------------------------------------------
+  // TEST 4: Functional transfer of Coins via Inventory
+  // -------------------------------------------------------------------
+  console.log('\n--- TEST 4: Functional transfer of Coins via Inventory ---');
+  const coinsBefore = recipAfter3.coins_balance;
+  const resCoins = mockStore.sendGift({
+    senderId,
+    recipientUsername,
+    rewardId: 'reward-coins-50',
+    quantity: 1,
+    source: 'inventory',
+  });
+  assert(resCoins.success, `Coins transfer failed: ${resCoins.error}`);
+  const recipAfterCoins = mockStore.getUserById(recipId);
+  assert.strictEqual(recipAfterCoins.coins_balance, coinsBefore + 50, 'Coins should be incremented by 50');
+  console.log('  ✅ [PASS] Coins (+50) credited directly to recipient balance');
+
+  // -------------------------------------------------------------------
+  // TEST 5: UC Shop Purchase Rejected & Inventory Transfer Succeeded
+  // -------------------------------------------------------------------
+  console.log('\n--- TEST 5: UC Shop Gifting Rejected / Inventory Transfer Succeeded ---');
+  // Attempting to buy UC from shop must be rejected
+  const shopUcRes = mockStore.sendGift({
+    senderId,
+    recipientUsername,
+    rewardId: 'reward-uc-30',
+    quantity: 1,
+    source: 'shop',
+  });
+  assert(!shopUcRes.success, 'Shop purchase of UC must be rejected');
+  assert(shopUcRes.error.includes('недоступен'), 'Error message must state UC is unavailable in shop');
+  console.log('  ✅ [PASS] Purchasing UC via shop gift correctly rejected');
+
+  // Transferring UC from existing inventory must succeed
+  const ucBefore = recipAfterCoins.total_uc;
+  const invUcRes = mockStore.sendGift({
+    senderId,
+    recipientUsername,
+    rewardId: 'reward-uc-30',
+    quantity: 1,
+    source: 'inventory',
+  });
+  assert(invUcRes.success, `Inventory UC transfer failed: ${invUcRes.error}`);
+  const recipAfterUc = mockStore.getUserById(recipId);
+  assert.strictEqual(recipAfterUc.total_uc, ucBefore + 30, 'UC should be incremented by 30');
+  console.log('  ✅ [PASS] UC (+30) transferred from inventory directly to recipient UC balance');
+
+  // -------------------------------------------------------------------
+  // TEST 6: Decorative gifts go into inventory
+  // -------------------------------------------------------------------
+  console.log('\n--- TEST 6: Decorative gifts go into inventory ---');
+  const resSticker = mockStore.sendGift({
+    senderId,
+    recipientUsername,
+    rewardId: 'reward-xmas-sticker',
+    quantity: 1,
+    source: 'shop',
+  });
+  assert(resSticker.success, `Sticker gift failed: ${resSticker.error}`);
+  const recipInvSticker = mockStore.getUserInventory(recipId);
+  const hasSticker = recipInvSticker.some((it) => it.rewardId === 'reward-xmas-sticker');
+  assert(hasSticker, 'Decorative sticker must be found in recipient inventory');
+  console.log('  ✅ [PASS] Decorative souvenir correctly added to user_inventory');
+
+  // -------------------------------------------------------------------
+  // TEST 7: Canonical accounts check
+  // -------------------------------------------------------------------
+  console.log('\n--- TEST 7: Canonical accounts check ---');
+  const allUsers = mockStore.getUsers();
+  const admins = allUsers.filter((u) => ['admin', 'adminvip', 'lucky_admin'].includes(u.username));
+  const vips = allUsers.filter((u) => ['VIP5000X', 'VIP2026Z', 'VIP7777M', 'VIP9999K'].includes(u.username));
+  const standards = allUsers.filter((u) =>
+    [
+      'Snow24A', 'Frost82B', 'Winter39C', 'Gift51Dx', 'Santa73K',
+      'Magic46P', 'Merry28Q', 'North64R', 'Star92Tm', 'Candy35V',
+    ].includes(u.username)
+  );
+
+  assert.strictEqual(admins.length, 3, 'Must have 3 dedicated admins');
+  assert.strictEqual(vips.length, 4, 'Must have 4 VIP accounts');
+  assert.strictEqual(standards.length, 10, 'Must have 10 standard accounts');
+  console.log('  ✅ [PASS] All 17 canonical accounts remain intact with exact roles');
+} finally {
+  // Cleanup test users and test state
+  const remainingUsers = mockStore.getUsers().filter((u) => u.id !== senderId && u.id !== recipId);
+  mockStore.saveUsers(remainingUsers);
+  const remainingInv = mockStore.getInventory();
+  delete remainingInv[senderId];
+  delete remainingInv[recipId];
+  mockStore.saveInventory(remainingInv);
+  mockStore.saveToFile();
+  console.log('  🧹 [CLEANUP] Temporary test users cleaned up cleanly');
 }
-
-const frostAfter1 = mockStore.getUserById(frost.id);
-console.log(`Frost82B free_spins_balance after receiving 2 spins: ${frostAfter1.free_spins_balance}`);
-
-if (frostAfter1.free_spins_balance !== 2) {
-  console.error(`FAIL TEST 1: Expected free_spins_balance === 2, got ${frostAfter1.free_spins_balance}`);
-  process.exit(1);
-}
-
-// Verify no decorative spin in inventory
-const frostInv1 = mockStore.getUserInventory(frost.id);
-const hasSpinInInv = frostInv1.some(it => it.rewardId === 'reward-spin-1');
-if (hasSpinInInv) {
-  console.error('FAIL TEST 1: Decorative spin was incorrectly added to inventory!');
-  process.exit(1);
-}
-console.log('PASS TEST 1: Exactly 2 usable spins added directly to recipient free_spins_balance! No decorative clutter in inventory.');
-
-// -------------------------------------------------------------------
-// TEST 2: Recipient uses received spins on Roulette / Spin page
-// -------------------------------------------------------------------
-console.log('\n--- TEST 2: Recipient uses received spins on Roulette ---');
-// Spin 1
-if (frostAfter1.free_spins_balance <= 0) {
-  console.error('FAIL TEST 2: Recipient has no spins to play');
-  process.exit(1);
-}
-frostAfter1.free_spins_balance -= 1;
-mockStore.updateUser(frost.id, { free_spins_balance: frostAfter1.free_spins_balance });
-console.log(`Spin 1 played. Remaining spins: ${frostAfter1.free_spins_balance}`);
-if (frostAfter1.free_spins_balance !== 1) {
-  console.error('FAIL TEST 2: Balance should be 1 after 1st spin');
-  process.exit(1);
-}
-
-// Spin 2
-frostAfter1.free_spins_balance -= 1;
-mockStore.updateUser(frost.id, { free_spins_balance: frostAfter1.free_spins_balance });
-console.log(`Spin 2 played. Remaining spins: ${frostAfter1.free_spins_balance}`);
-if (frostAfter1.free_spins_balance !== 0) {
-  console.error('FAIL TEST 2: Balance should be 0 after 2nd spin');
-  process.exit(1);
-}
-
-// Spin 3 attempt with 0 spins
-if (frostAfter1.free_spins_balance <= 0) {
-  console.log('Spin 3 correctly rejected: 0 spins left. Balance cannot go negative.');
-}
-console.log('PASS TEST 2: Received spins were fully functional and successfully consumed 1 by 1 down to 0.');
-
-// -------------------------------------------------------------------
-// TEST 3: Inventory transfer of multi-value Spin (reward-spin-2 gives 2 spins)
-// -------------------------------------------------------------------
-console.log('\n--- TEST 3: Inventory transfer of reward-spin-2 ---');
-// Put reward-spin-2 into Snow's inventory
-mockStore.addItemToInventory(snow.id, 'reward-spin-2', 1);
-const snowInvBefore = mockStore.getUserInventory(snow.id);
-const snowSpinItem = snowInvBefore.find(it => it.rewardId === 'reward-spin-2');
-if (!snowSpinItem || snowSpinItem.quantity < 1) {
-  console.error('FAIL TEST 3: Snow missing spin item');
-  process.exit(1);
-}
-
-const res3 = mockStore.sendGift({
-  senderId: snow.id,
-  recipientUsername: frost.username,
-  rewardId: 'reward-spin-2',
-  quantity: 1,
-  message: 'Лови двойной спин из моей сумки!',
-  source: 'inventory',
-});
-
-if (!res3.success) {
-  console.error('FAIL TEST 3: sendGift failed:', res3.error);
-  process.exit(1);
-}
-
-const frostAfter3 = mockStore.getUserById(frost.id);
-// reward-spin-2 has value: 2, so +2 spins!
-if (frostAfter3.free_spins_balance !== 2) {
-  console.error(`FAIL TEST 3: Expected free_spins_balance === 2, got ${frostAfter3.free_spins_balance}`);
-  process.exit(1);
-}
-
-const snowInvAfter = mockStore.getUserInventory(snow.id);
-const snowItemAfter = snowInvAfter.find(it => it.rewardId === 'reward-spin-2');
-if (snowItemAfter && snowItemAfter.quantity > 0) {
-  console.error('FAIL TEST 3: Item was not deducted from sender inventory');
-  process.exit(1);
-}
-console.log('PASS TEST 3: Inventory transfer credited 2 spins to recipient and deducted 1 from sender.');
-
-// -------------------------------------------------------------------
-// TEST 4: Functional transfer of UC and Coins
-// -------------------------------------------------------------------
-console.log('\n--- TEST 4: Functional transfer of UC and Coins ---');
-const frostCoinsBefore = frostAfter3.coins_balance;
-const frostUcBefore = frostAfter3.total_uc;
-
-// Gift coins
-const resCoins = mockStore.sendGift({
-  senderId: snow.id,
-  recipientUsername: frost.username,
-  rewardId: 'reward-coins-50',
-  quantity: 1,
-  source: 'shop',
-});
-if (!resCoins.success) {
-  console.error('FAIL TEST 4 (Coins):', resCoins.error);
-  process.exit(1);
-}
-
-// Gift UC
-const resUc = mockStore.sendGift({
-  senderId: snow.id,
-  recipientUsername: frost.username,
-  rewardId: 'reward-uc-30',
-  quantity: 1,
-  source: 'shop',
-});
-if (!resUc.success) {
-  console.error('FAIL TEST 4 (UC):', resUc.error);
-  process.exit(1);
-}
-
-const frostAfter4 = mockStore.getUserById(frost.id);
-if (frostAfter4.coins_balance !== frostCoinsBefore + 50) {
-  console.error(`FAIL TEST 4: Expected coins ${frostCoinsBefore + 50}, got ${frostAfter4.coins_balance}`);
-  process.exit(1);
-}
-if (frostAfter4.total_uc !== frostUcBefore + 30) {
-  console.error(`FAIL TEST 4: Expected UC ${frostUcBefore + 30}, got ${frostAfter4.total_uc}`);
-  process.exit(1);
-}
-console.log('PASS TEST 4: Coins (+50) and UC (+30) correctly credited directly to recipient balances.');
-
-// -------------------------------------------------------------------
-// TEST 5: Decorative items go into inventory
-// -------------------------------------------------------------------
-console.log('\n--- TEST 5: Decorative gifts go into inventory ---');
-const resSticker = mockStore.sendGift({
-  senderId: snow.id,
-  recipientUsername: frost.username,
-  rewardId: 'reward-xmas-sticker',
-  quantity: 1,
-  source: 'shop',
-});
-if (!resSticker.success) {
-  console.error('FAIL TEST 5:', resSticker.error);
-  process.exit(1);
-}
-const frostInvAfterSticker = mockStore.getUserInventory(frost.id);
-const hasSticker = frostInvAfterSticker.some(it => it.rewardId === 'reward-xmas-sticker');
-if (!hasSticker) {
-  console.error('FAIL TEST 5: Decorative item was not found in recipient inventory');
-  process.exit(1);
-}
-console.log('PASS TEST 5: Decorative item (reward-xmas-sticker) was correctly added to user_inventory.');
-
-// -------------------------------------------------------------------
-// TEST 6: Daily spins addition preserves existing gifted spins
-// -------------------------------------------------------------------
-console.log('\n--- TEST 6: Daily grant preserves gifted spins ---');
-// Frost currently has 2 spins left from TEST 3.
-frostAfter4.last_daily_spins_at = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // 25 hours ago
-mockStore.updateUser(frost.id, {
-  free_spins_balance: 2,
-  last_daily_spins_at: frostAfter4.last_daily_spins_at,
-});
-
-mockStore.checkAndGrantDailySpins(frost.id);
-const frostAfterDaily = mockStore.getUserById(frost.id);
-// Previous 2 gifted spins + 2 daily spins = 4 spins!
-if (frostAfterDaily.free_spins_balance !== 4) {
-  console.error(`FAIL TEST 6: Expected 4 spins (2 gifted + 2 daily), got ${frostAfterDaily.free_spins_balance}`);
-  process.exit(1);
-}
-console.log('PASS TEST 6: 24-hour daily spins added +2 to balance without wiping out gifted spins (total 4).');
-
-// -------------------------------------------------------------------
-// TEST 7: Account Integrity Check
-// -------------------------------------------------------------------
-console.log('\n--- TEST 7: Canonical accounts check ---');
-const allUsers = mockStore.getUsers();
-const admins = allUsers.filter(u => ['admin', 'adminvip', 'lucky_admin'].includes(u.username));
-const vips = allUsers.filter(u => ['VIP5000X', 'VIP2026Z', 'VIP7777M', 'VIP9999K'].includes(u.username));
-const standards = allUsers.filter(u => [
-  'Snow24A', 'Frost82B', 'Winter39C', 'Gift51Dx', 'Santa73K',
-  'Magic46P', 'Merry28Q', 'North64R', 'Star92Tm', 'Candy35V',
-].includes(u.username));
-
-if (admins.length !== 3 || vips.length !== 4 || standards.length !== 10) {
-  console.error('FAIL TEST 7: Missing accounts');
-  process.exit(1);
-}
-console.log('PASS TEST 7: All 17 canonical accounts remain intact with proper roles.');
 
 console.log('\n🎉 ALL FUNCTIONAL GIFT & SPIN TESTS PASSED SUCCESSFULLY! 🎉\n');

@@ -30,13 +30,35 @@ export async function POST(request) {
 
     const itemId = String(rawItemId).trim();
 
-    // 2. Reject titles from being consumed
-    const meta = resolveTitle(itemId);
-    if (meta && (meta.isTitle || meta.category === 'titles')) {
+    // 2. Reject titles and non-consumable items from being consumed
+    const titleMeta = resolveTitle(itemId);
+    if (titleMeta && (titleMeta.isTitle || titleMeta.category === 'titles')) {
       return NextResponse.json(
         { success: false, error: 'Титулы экипируются в профиле, а не расходуются' },
         { status: 400 }
       );
+    }
+
+    const rewardMeta = resolveReward(itemId);
+    if (rewardMeta) {
+      const cat = rewardMeta.category || '';
+      const slug = rewardMeta.id || '';
+      const isConsumable =
+        ['spins', 'uc', 'coins', 'popularity'].includes(cat) ||
+        slug.startsWith('reward-spin-') ||
+        slug.startsWith('reward-uc-') ||
+        slug.startsWith('reward-coins-') ||
+        slug.startsWith('reward-pop-');
+
+      if (!isConsumable) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Данный предмет является коллекционным подарком и не может быть использован как расходуемый',
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // 3. Supabase atomic execution

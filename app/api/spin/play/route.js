@@ -227,7 +227,16 @@ export async function POST(request) {
         points_balance: newPoints,
       });
 
-      mockStore.addItemToInventory(user.id, wonReward.id, 1);
+      // Only add decorative items/souvenirs to inventory (currency is added directly to balances)
+      if (
+        !['spins', 'uc', 'coins', 'popularity'].includes(wonReward.category) &&
+        !wonReward.id.startsWith('reward-coins-') &&
+        !wonReward.id.startsWith('reward-uc-') &&
+        !wonReward.id.startsWith('reward-pop-') &&
+        !wonReward.id.startsWith('reward-spin-')
+      ) {
+        mockStore.addItemToInventory(user.id, wonReward.id, 1);
+      }
 
       mockStore.addSpinHistory({
         userId: user.id,

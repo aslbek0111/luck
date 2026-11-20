@@ -322,6 +322,13 @@ export default function InventoryPage() {
                 const Icon = ICON_MAP[item.icon] || Package;
                 const isTitle = item.isTitle || item.category === 'titles';
                 const isEquipped = isTitle && (activeTitle?.id === item.id || activeTitle?.slug === item.titleSlug);
+                const isConsumable =
+                  !isTitle &&
+                  (['spins', 'uc', 'coins', 'popularity'].includes(item.category) ||
+                    String(item.id).startsWith('reward-spin-') ||
+                    String(item.id).startsWith('reward-uc-') ||
+                    String(item.id).startsWith('reward-coins-') ||
+                    String(item.id).startsWith('reward-pop-'));
 
                 return (
                   <GlassCard
@@ -419,15 +426,17 @@ export default function InventoryPage() {
                           </button>
                         ) : (
                           <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => handleUseItem(item)}
-                              disabled={usingItemId === item.id}
-                              type="button"
-                              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                            >
-                              <Sparkles className="w-3.5 h-3.5" />
-                              <span>{usingItemId === item.id ? '...' : 'Использовать'}</span>
-                            </button>
+                            {isConsumable && (
+                              <button
+                                onClick={() => handleUseItem(item)}
+                                disabled={usingItemId === item.id}
+                                type="button"
+                                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                              >
+                                <Sparkles className="w-3.5 h-3.5" />
+                                <span>{usingItemId === item.id ? '...' : 'Использовать'}</span>
+                              </button>
+                            )}
                             <Link
                               href={`/gifts?tab=send&item=${item.id}`}
                               className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition-all flex items-center gap-1"

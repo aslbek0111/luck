@@ -15,73 +15,39 @@ async function handleDailySpins(request) {
     const userId = session.userId;
 
     if (isServerSupabaseConfigured && supabaseServer) {
-      // 1. Try atomic RPC in Supabase
+      // 1. Atomic RPC in Supabase
       const { data: rpcData, error: rpcErr } = await supabaseServer.rpc('check_and_grant_daily_spins_atomic', {
         p_user_id: userId,
       });
 
-      if (!rpcErr && rpcData) {
-        if (!rpcData.success) {
-          return NextResponse.json({ success: false, error: rpcData.error }, { status: 400 });
-        }
-        return NextResponse.json(rpcData);
+      if (rpcErr) {
+        console.error('Supabase check_and_grant_daily_spins_atomic error:', rpcErr);
+        return NextResponse.json(
+          { success: false, error: rpcErr.message || 'Ошибка базы данных при начислении ежедневных вращений' },
+          { status: 500 }
+        );
       }
 
-      // Fallback direct server computation
-      const { data: user, error: userErr } = await supabaseServer
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (userErr || !user) {
-        return NextResponse.json({ success: false, error: 'Пользователь не найден' }, { status: 404 });
+      if (!rpcData) {
+        return NextResponse.json(
+          { success: false, error: 'Ответ от базы данных отсутствует' },
+          { status: 500 }
+        );
       }
 
-      if (user.is_vip || user.is_admin) {
-        return NextResponse.json({
-          success: true,
-          is_vip: true,
-          is_admin: true,
-          free_spins: 999999,
-          seconds_remaining: 0,
-          next_daily_spins_at: null,
-        });
+      if (!rpcData.success) {
+        const errorMsg = rpcData.error || 'Не удалось начислить ежедневные вращения';
+        const isBlocked =
+          typeof errorMsg === 'string' &&
+          (errorMsg.toLowerCase().includes('blocked') || errorMsg.toLowerCase().includes('заблокирован'));
+
+        return NextResponse.json(
+          { success: false, error: errorMsg },
+          { status: isBlocked ? 403 : 400 }
+        );
       }
 
-      const now = Date.now();
-      const DAY_MS = 24 * 60 * 60 * 1000;
-      const lastGrant = user.last_daily_spins_at ? new Date(user.last_daily_spins_at).getTime() : 0;
-      let freeSpins = user.free_spins_balance || 0;
-      let lastDailySpinsAt = user.last_daily_spins_at;
-      let granted = false;
-
-      if (!lastDailySpinsAt || now - lastGrant >= DAY_MS) {
-        freeSpins = (user.free_spins_balance || 0) + 2;
-        lastDailySpinsAt = new Date(now).toISOString();
-        granted = true;
-
-        await supabaseServer
-          .from('users')
-          .update({
-            free_spins_balance: freeSpins,
-            last_daily_spins_at: lastDailySpinsAt,
-            updated_at: lastDailySpinsAt,
-          })
-          .eq('id', user.id);
-      }
-
-      const nextGrantTime = new Date(lastDailySpinsAt).getTime() + DAY_MS;
-      const secondsRemaining = Math.max(0, Math.ceil((nextGrantTime - now) / 1000));
-
-      return NextResponse.json({
-        success: true,
-        granted,
-        free_spins: freeSpins,
-        last_daily_spins_at: lastDailySpinsAt,
-        next_daily_spins_at: new Date(nextGrantTime).toISOString(),
-        seconds_remaining: secondsRemaining,
-      });
+      return NextResponse.json(rpcData);
     }
 
     // Dev store / mockStore execution

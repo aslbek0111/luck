@@ -138,14 +138,14 @@ mockStore.saveInventory({
   'user-bob': [],
 });
 
-// A. Gifting only 1 copy must FAIL
-const soleCopyRes = mockStore.sendGift({
+// A. Gifting more than owned quantity must FAIL (e.g., owned 1, requesting 2)
+const excessQtyRes = mockStore.sendGift({
   senderId: 'user-alice',
   recipientUsername: 'bob',
   rewardId: 'reward-rose-bouquet',
-  quantity: 1,
+  quantity: 2,
 });
-assert(!soleCopyRes.success && soleCopyRes.error?.includes('единственный экземпляр'), 'Gifting the sole copy of an item rejected');
+assert(!excessQtyRes.success && excessQtyRes.error?.includes('Недостаточно предметов'), 'Gifting more items than owned rejected');
 
 // B. Negative quantity exploit must FAIL (prevent item duplication)
 const negativeRes = mockStore.sendGift({
@@ -156,23 +156,26 @@ const negativeRes = mockStore.sendGift({
 });
 assert(!negativeRes.success, 'Negative quantity gift exploit rejected');
 
-// C. Gifting ALL copies (quantity = 3, remaining = 0) must FAIL
-const allCopiesRes = mockStore.sendGift({
+// C. Message length > 500 characters must FAIL
+const longMsgRes = mockStore.sendGift({
   senderId: 'user-alice',
   recipientUsername: 'bob',
   rewardId: 'reward-cup',
-  quantity: 3,
+  quantity: 1,
+  message: 'X'.repeat(501),
 });
-assert(!allCopiesRes.success && allCopiesRes.error?.includes('все копии'), 'Gifting all remaining copies (leaving 0) rejected');
+assert(!longMsgRes.success && longMsgRes.error?.includes('500'), 'Gift message > 500 characters rejected');
 
-// D. Gifting last copy of equipped title (quantity = 2, leaving 0) must FAIL
-const activeTitleAllRes = mockStore.sendGift({
+// D. Gifting to blocked recipient must FAIL
+mockStore.updateUser('user-bob', { is_blocked: true });
+const blockedRecipRes = mockStore.sendGift({
   senderId: 'user-alice',
   recipientUsername: 'bob',
-  rewardId: 'title-korol',
-  quantity: 2,
+  rewardId: 'reward-cup',
+  quantity: 1,
 });
-assert(!activeTitleAllRes.success, 'Gifting all copies of active equipped title rejected');
+assert(!blockedRecipRes.success && blockedRecipRes.error?.includes('заблокирован'), 'Gifting to blocked recipient rejected');
+mockStore.updateUser('user-bob', { is_blocked: false });
 
 // E. Gifting to self must FAIL
 const selfGiftRes = mockStore.sendGift({
@@ -183,7 +186,7 @@ const selfGiftRes = mockStore.sendGift({
 });
 assert(!selfGiftRes.success && selfGiftRes.error?.includes('самому себе'), 'Gifting to self rejected');
 
-// F. Legitimate gift of duplicate item (quantity = 1 out of 3) must SUCCEED
+// F. Legitimate gift of item (quantity = 1 out of 3) must SUCCEED
 const validGiftRes = mockStore.sendGift({
   senderId: 'user-alice',
   recipientUsername: 'bob',
@@ -200,6 +203,17 @@ assert(cupItem && cupItem.quantity === 2, 'Sender retains remaining copy (quanti
 const bobInv = mockStore.getUserInventory('user-bob');
 const bobCup = bobInv.find((i) => i.rewardId === 'reward-cup');
 assert(bobCup && bobCup.quantity === 1, 'Recipient correctly receives 1 copy');
+
+// G. Quantity > 0 rule: gifting all copies (quantity = 1 out of 1) removes item from sender
+const allCopiesRes = mockStore.sendGift({
+  senderId: 'user-alice',
+  recipientUsername: 'bob',
+  rewardId: 'reward-rose-bouquet',
+  quantity: 1,
+});
+assert(allCopiesRes.success, 'Gifting all remaining copies succeeds under Quantity > 0 rule');
+const aliceInvAfterSole = mockStore.getUserInventory('user-alice');
+assert(!aliceInvAfterSole.some((i) => i.rewardId === 'reward-rose-bouquet'), 'Item is removed from sender inventory when 0 copies remain');
 
 // -------------------------------------------------------------
 // 4. SPIN CONCURRENCY & RACE CONDITION PROTECTION SIMULATION

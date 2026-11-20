@@ -52,14 +52,31 @@ assert.strictEqual(toSlugId('10000000-0000-0000-0000-000000000009'), 'reward-ros
 console.log('  ✅ [PASS] Bijective mappings and aliases resolved cleanly');
 
 // 3. Test use_inventory_item functionality
-console.log('\n--- 3. USE INVENTORY ITEM EXECUTION ---');
-mockStore.ensureCanonicalAccounts();
-const user = mockStore.getUsers().find((u) => u.username === 'Snow24A');
-assert(user, 'User Snow24A must exist');
+console.log('\n--- 3. USE INVENTORY ITEM EXECUTION (ISOLATED TEST USER) ---');
 
-// Reset user inventory for test
+const testUserId = `test-user-inv-${Date.now()}`;
+const tempUsername = `temp_inv_${Date.now()}`;
+const testUser = {
+  id: testUserId,
+  username: tempUsername,
+  first_name: 'Temp Inv User',
+  free_spins_balance: 5,
+  coins_balance: 1000,
+  points_balance: 1000,
+  total_uc: 200,
+  is_blocked: false,
+};
+mockStore.addUser(testUser);
+mockStore.updateUser(testUserId, {
+  free_spins_balance: 5,
+  coins_balance: 1000,
+  points_balance: 1000,
+  total_uc: 200,
+});
+
+// Set isolated user inventory
 const inv = mockStore.getInventory();
-inv[user.id] = [
+inv[testUserId] = [
   { id: 'inv-spin-1', rewardId: 'reward-spin-1', quantity: 3 },
   { id: 'inv-coins-50', rewardId: 'reward-coins-50', quantity: 2 },
   { id: 'inv-uc-30', rewardId: 'reward-uc-30', quantity: 1 },
@@ -68,47 +85,61 @@ inv[user.id] = [
 ];
 mockStore.saveInventory(inv);
 
-user.free_spins_balance = 5;
-user.coins_balance = 1000;
-user.total_uc = 200;
-mockStore.updateUser(user.id, {
-  free_spins_balance: 5,
-  coins_balance: 1000,
-  total_uc: 200,
-});
+try {
+  // A) Use spins item
+  const spinRes = mockStore.useInventoryItem(testUserId, 'reward-spin-1', 1);
+  assert(spinRes.success, 'Using reward-spin-1 must succeed');
+  assert.strictEqual(spinRes.remainingQuantity, 2, 'Remaining quantity should be 2');
+  assert.strictEqual(spinRes.user.free_spins_balance, 6, 'free_spins_balance should be incremented from 5 to 6');
+  console.log('  ✅ [PASS] Consuming spin item adds free spins and decrements inventory');
 
-// A) Use spins item
-const spinRes = mockStore.useInventoryItem(user.id, 'reward-spin-1', 1);
-assert(spinRes.success, 'Using reward-spin-1 must succeed');
-assert.strictEqual(spinRes.remainingQuantity, 2, 'Remaining quantity should be 2');
-assert.strictEqual(spinRes.user.free_spins_balance, 6, 'free_spins_balance should be incremented from 5 to 6');
-console.log('  ✅ [PASS] Consuming spin item adds free spins and decrements inventory');
+  // B) Use coins item
+  const coinsRes = mockStore.useInventoryItem(testUserId, 'reward-coins-50', 1);
+  assert(coinsRes.success, 'Using reward-coins-50 must succeed');
+  assert.strictEqual(coinsRes.remainingQuantity, 1, 'Remaining quantity should be 1');
+  assert.strictEqual(coinsRes.user.coins_balance, 1050, 'coins_balance should be incremented from 1000 to 1050');
+  assert.strictEqual(coinsRes.user.points_balance, 1050, 'points_balance must stay synchronized with coins_balance');
+  console.log('  ✅ [PASS] Consuming coins item adds coins and decrements inventory');
 
-// B) Use coins item
-const coinsRes = mockStore.useInventoryItem(user.id, 'reward-coins-50', 1);
-assert(coinsRes.success, 'Using reward-coins-50 must succeed');
-assert.strictEqual(coinsRes.remainingQuantity, 1, 'Remaining quantity should be 1');
-assert.strictEqual(coinsRes.user.coins_balance, 1050, 'coins_balance should be incremented from 1000 to 1050');
-console.log('  ✅ [PASS] Consuming coins item adds coins and decrements inventory');
+  // C) Use UC item
+  const ucRes = mockStore.useInventoryItem(testUserId, 'reward-uc-30', 1);
+  assert(ucRes.success, 'Using reward-uc-30 must succeed');
+  assert.strictEqual(ucRes.remainingQuantity, 0, 'Remaining quantity should be 0');
+  assert.strictEqual(ucRes.user.total_uc, 230, 'total_uc should be incremented from 200 to 230');
+  console.log('  ✅ [PASS] Consuming UC item adds total_uc and removes consumed item');
 
-// C) Use UC item
-const ucRes = mockStore.useInventoryItem(user.id, 'reward-uc-30', 1);
-assert(ucRes.success, 'Using reward-uc-30 must succeed');
-assert.strictEqual(ucRes.remainingQuantity, 0, 'Remaining quantity should be 0');
-assert.strictEqual(ucRes.user.total_uc, 230, 'total_uc should be incremented from 200 to 230');
-console.log('  ✅ [PASS] Consuming UC item adds total_uc and removes consumed item');
+  // D) Consuming Title must fail
+  const titleRes = mockStore.useInventoryItem(testUserId, 'title-korol', 1);
+  assert(!titleRes.success, 'Using title as consumable must fail');
+  assert(titleRes.error.includes('Титулы экипируются'), 'Error message must explain titles are equipped');
+  console.log('  ✅ [PASS] Consuming title correctly rejected');
 
-// D) Consuming Title must fail
-const titleRes = mockStore.useInventoryItem(user.id, 'title-korol', 1);
-assert(!titleRes.success, 'Using title as consumable must fail');
-assert(titleRes.error.includes('Титулы экипируются'), 'Error message must explain titles are equipped');
-console.log('  ✅ [PASS] Consuming title correctly rejected');
+  // E) Consuming non-consumable collectible gift must fail and NOT convert to coins
+  const stickerRes = mockStore.useInventoryItem(testUserId, 'reward-xmas-sticker', 1);
+  assert(!stickerRes.success, 'Consuming non-consumable gift must fail');
+  assert(stickerRes.error.includes('коллекционным подарком'), 'Error message must state item is collectible gift');
+  const invAfterSticker = mockStore.getInventory()[testUserId];
+  const stickerItem = invAfterSticker.find((i) => i.rewardId === 'reward-xmas-sticker');
+  assert.strictEqual(stickerItem.quantity, 2, 'Sticker quantity must remain unchanged');
+  const userAfterSticker = mockStore.getUserById(testUserId);
+  assert.strictEqual(userAfterSticker.coins_balance, 1050, 'Coins must NOT be converted/added for non-consumable items');
+  console.log('  ✅ [PASS] Non-consumable collectible gift strictly rejected and not converted to coins');
 
-// E) Consuming item user does not have must fail
-const missingRes = mockStore.useInventoryItem(user.id, 'reward-xmas-miracle-box', 1);
-assert(!missingRes.success, 'Using unowned item must fail');
-assert(missingRes.error.includes('Недостаточно предметов'), 'Error message must state insufficient items');
-console.log('  ✅ [PASS] Consuming unowned item correctly rejected');
+  // F) Consuming consumable item user does not have must fail
+  const missingRes = mockStore.useInventoryItem(testUserId, 'reward-pop-100', 1);
+  assert(!missingRes.success, 'Using unowned item must fail');
+  assert(missingRes.error.includes('Недостаточно предметов'), 'Error message must state insufficient items');
+  console.log('  ✅ [PASS] Consuming unowned item correctly rejected');
+} finally {
+  // Clean up isolated temporary user
+  const cleanUsers = mockStore.getUsers().filter((u) => u.id !== testUserId);
+  mockStore.saveUsers(cleanUsers);
+  const cleanInv = mockStore.getInventory();
+  delete cleanInv[testUserId];
+  mockStore.saveInventory(cleanInv);
+  mockStore.saveToFile();
+  console.log('  🧹 [CLEANUP] Temporary test user cleaned up cleanly');
+}
 
 console.log('\n========================================================================');
 console.log('🎉 ALL INVENTORY USE AND ATOMIC RPC CHECKS PASSED SUCCESSFULLY!');

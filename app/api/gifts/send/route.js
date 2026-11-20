@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/session';
 import { supabaseServer, isServerSupabaseConfigured } from '@/lib/supabaseServer';
 import { mockStore } from '@/lib/mock-store';
-import { REWARDS_CATALOG, toDbUuid } from '@/lib/catalog-data';
+import { REWARDS_CATALOG, toDbUuid, isItemAvailableInShop, resolveReward } from '@/lib/catalog-data';
 
 export async function POST(request) {
   try {
@@ -18,6 +18,10 @@ export async function POST(request) {
     const body = await request.json();
     const { recipientUsername, rewardId, quantity = 1, message = '', source = 'inventory' } = body;
 
+    if (message && typeof message === 'string' && message.length > 500) {
+      return NextResponse.json({ success: false, error: 'Длина сообщения к подарку не может превышать 500 символов' }, { status: 400 });
+    }
+
     if (!recipientUsername || !recipientUsername.trim()) {
       return NextResponse.json({ success: false, error: 'Укажите никнейм получателя' }, { status: 400 });
     }
@@ -30,9 +34,13 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: 'Количество должно быть от 1 до 1000' }, { status: 400 });
     }
 
-    const rewardMeta = REWARDS_CATALOG.find((r) => r.id === rewardId || r.uuid === rewardId);
+    const rewardMeta = resolveReward(rewardId) || REWARDS_CATALOG.find((r) => r.id === rewardId || r.uuid === rewardId);
     if (!rewardMeta) {
       return NextResponse.json({ success: false, error: 'Предмет не найден в каталоге' }, { status: 400 });
+    }
+
+    if (source === 'shop' && !isItemAvailableInShop(rewardMeta)) {
+      return NextResponse.json({ success: false, error: 'Этот предмет недоступен для покупки в магазине' }, { status: 400 });
     }
 
     const dbRewardId = toDbUuid(rewardMeta.id) || rewardId;
@@ -60,7 +68,7 @@ export async function POST(request) {
       // If RPC not configured or shop gifting, execute logic directly
       const { data: recipient, error: recipErr } = await supabaseServer
         .from('users')
-        .select('id, username, free_spins_balance, total_uc, coins_balance, points_balance')
+        .select('id, username, is_blocked, free_spins_balance, total_uc, coins_balance, points_balance')
         .ilike('username', cleanUsername)
         .maybeSingle();
 
@@ -70,6 +78,10 @@ export async function POST(request) {
 
       if (recipient.id === senderId) {
         return NextResponse.json({ success: false, error: 'Нельзя отправить подарок самому себе' }, { status: 400 });
+      }
+
+      if (recipient.is_blocked) {
+        return NextResponse.json({ success: false, error: 'Получатель заблокирован и не может принимать подарки' }, { status: 400 });
       }
 
       const { data: sender } = await supabaseServer
