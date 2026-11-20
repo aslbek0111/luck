@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/session';
-import { supabaseServer, isServerSupabaseConfigured } from '@/lib/supabaseServer';
+import { supabaseServer, isServerSupabaseConfigured, getSupabaseDiagnostics } from '@/lib/supabaseServer';
 import { mockStore } from '@/lib/mock-store';
 import { TITLES_LIST, resolveTitle, toDbUuid } from '@/lib/catalog-data';
 
@@ -30,7 +30,15 @@ export async function POST(request) {
 
     const dbTitleId = toDbUuid(titleMeta.id) || toDbUuid(titleId) || titleMeta.uuid || titleId;
 
+    const diag = getSupabaseDiagnostics();
+
     if (isServerSupabaseConfigured && supabaseServer && userId) {
+      console.log(`[TITLES_EQUIP] Processing equip request: userId=${userId}, titleId=${titleId}, dbTitleId=${dbTitleId}, isUsingServiceRole=${diag.isUsingServiceRole}, keyRole=${diag.serviceRoleKeyRole}`);
+
+      if (!diag.isUsingServiceRole && process.env.NODE_ENV === 'production') {
+        console.warn(`[TITLES_EQUIP_WARNING] SUPABASE_SERVICE_ROLE_KEY is not configured with role 'service_role' (current: '${diag.serviceRoleKeyRole}'). Direct updates on public.users will be blocked by RLS.`);
+      }
+
       // 2. Fetch user to check VIP status
       const { data: userRecord } = await supabaseServer
         .from('users')
@@ -52,23 +60,64 @@ export async function POST(request) {
       const hasInInventory = !invErr && invItem && invItem.quantity >= 1;
 
       if (!hasInInventory && !(isVipTitle && isVipUser)) {
+        console.warn(`[TITLES_EQUIP_FORBIDDEN] User ${userId} does not own title ${dbTitleId} and is not VIP`);
         return NextResponse.json({ success: false, error: 'У вас нет этого титула в коллекции' }, { status: 403 });
       }
 
       // 4. Update user active_title_id with canonical database UUID
-      const { data: updatedUser, error: updateErr } = await supabaseServer
+      const startTime = Date.now();
+      const { data: updatedRows, error: updateErr } = await supabaseServer
         .from('users')
         .update({
           active_title_id: dbTitleId,
           updated_at: new Date().toISOString(),
         })
         .eq('id', userId)
-        .select()
-        .single();
+        .select('id, username, active_title_id, is_vip, is_admin');
+
+      const durationMs = Date.now() - startTime;
+      const affectedRows = Array.isArray(updatedRows) ? updatedRows.length : (updatedRows ? 1 : 0);
+      const updatedUser = Array.isArray(updatedRows) && updatedRows.length > 0 ? updatedRows[0] : null;
+
+      console.log(`[TITLES_EQUIP_UPDATE] userId=${userId}, dbTitleId=${dbTitleId}, affectedRows=${affectedRows}, duration=${durationMs}ms, error=${updateErr ? updateErr.message : 'none'}`);
 
       if (updateErr) {
-        console.error('Supabase update active_title_id error:', updateErr);
-        return NextResponse.json({ success: false, error: updateErr.message || 'Ошибка обновления титула' }, { status: 500 });
+        console.error('[TITLES_EQUIP_ERROR] Supabase update active_title_id error:', updateErr);
+        return NextResponse.json({
+          success: false,
+          error: updateErr.message || 'Ошибка обновления титула',
+          debug: {
+            affectedRows: 0,
+            hasServiceRoleKey: diag.hasServiceRoleKey,
+            isUsingServiceRole: diag.isUsingServiceRole,
+          },
+        }, { status: 500 });
+      }
+
+      if (affectedRows === 0 || !updatedUser) {
+        console.error(`[TITLES_EQUIP_ERROR] Supabase update affected 0 rows for userId=${userId}. Possible RLS block or missing SUPABASE_SERVICE_ROLE_KEY. keyRole=${diag.serviceRoleKeyRole}`);
+        return NextResponse.json({
+          success: false,
+          error: 'Не удалось обновить титул: 0 строк изменено в базе данных. Проверьте права доступа и SUPABASE_SERVICE_ROLE_KEY на сервере.',
+          debug: {
+            affectedRows: 0,
+            hasServiceRoleKey: diag.hasServiceRoleKey,
+            isUsingServiceRole: diag.isUsingServiceRole,
+            serviceRoleKeyRole: diag.serviceRoleKeyRole,
+          },
+        }, { status: 500 });
+      }
+
+      if (updatedUser.active_title_id !== dbTitleId) {
+        console.error(`[TITLES_EQUIP_ERROR] Supabase update returned unexpected active_title_id: ${updatedUser.active_title_id}, expected: ${dbTitleId}`);
+        return NextResponse.json({
+          success: false,
+          error: 'База данных не сохранила active_title_id (значение осталось NULL). Проверьте триггеры или ограничения таблицы users.',
+          debug: {
+            savedValue: updatedUser.active_title_id,
+            expectedValue: dbTitleId,
+          },
+        }, { status: 500 });
       }
 
       // 5. Log public event safely (using valid UUID dbTitleId)
