@@ -28,11 +28,12 @@ export async function POST(request) {
     const userId = session.userId;
 
     if (isServerSupabaseConfigured && supabaseServer) {
-      const dbRewardId = toDbUuid(rewardId) || rewardId;
+      const cleanRewardIdentifier = String(toDbUuid(rewardId) || rewardId).trim();
+      const cleanUserId = String(userId).trim();
 
       const { data: result, error } = await supabaseServer.rpc('sell_duplicate_atomic', {
-        p_user_id: userId,
-        p_reward_identifier: dbRewardId,
+        p_reward_identifier: cleanRewardIdentifier,
+        p_user_id: cleanUserId,
       });
 
       if (error) {
@@ -50,7 +51,14 @@ export async function POST(request) {
         );
       }
 
-      return NextResponse.json(result);
+      return NextResponse.json({
+        ...result,
+        rewardName: result.item?.name || result.rewardName,
+        earnedCoins: result.coins_earned ?? result.coinsEarned ?? result.earnedCoins,
+        coinsEarned: result.coins_earned ?? result.coinsEarned ?? result.earnedCoins,
+        coinsBalance: result.coins_balance ?? result.coinsBalance,
+        remainingQuantity: result.item?.remaining_quantity ?? result.remainingQuantity ?? result.remaining_quantity,
+      });
     } else {
       // Development / Mock-store mode
       const result = mockStore.sellDuplicate(userId, rewardId);
