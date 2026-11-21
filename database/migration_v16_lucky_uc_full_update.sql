@@ -57,9 +57,10 @@ CREATE POLICY "Service role full access sales"
     ON public.sales_history FOR ALL 
     USING (auth.role() = 'service_role');
 
--- ------------------------------------------------------------------------------
 -- 3. ATOMIC RPC FUNCTION: sell_duplicate_atomic
 -- ------------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.sell_duplicate_atomic(UUID, TEXT);
+
 CREATE OR REPLACE FUNCTION public.sell_duplicate_atomic(
     p_reward_identifier TEXT,
     p_user_id UUID

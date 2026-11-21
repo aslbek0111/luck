@@ -52,6 +52,9 @@ CREATE POLICY "Service role full access sales"
 
 -- 3. CANONICAL ATOMIC RPC FUNCTION: sell_duplicate_atomic(p_reward_identifier TEXT, p_user_id UUID)
 -- ------------------------------------------------------------------------------
+-- Ensure no legacy reverse-signature function exists
+DROP FUNCTION IF EXISTS public.sell_duplicate_atomic(UUID, TEXT);
+
 CREATE OR REPLACE FUNCTION public.sell_duplicate_atomic(
     p_reward_identifier TEXT,
     p_user_id UUID
