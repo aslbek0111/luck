@@ -31,13 +31,30 @@ export async function POST(request) {
       const cleanRewardIdentifier = String(toDbUuid(rewardId) || rewardId).trim();
       const cleanUserId = String(userId).trim();
 
+      console.log('[SELL_DUPLICATE_RPC_DISPATCH]', {
+        function: 'public.sell_duplicate_atomic(p_reward_identifier text, p_user_id uuid)',
+        p_reward_identifier: {
+          value: cleanRewardIdentifier,
+          type: typeof cleanRewardIdentifier,
+        },
+        p_user_id: {
+          value: cleanUserId,
+          type: typeof cleanUserId,
+        },
+      });
+
       const { data: result, error } = await supabaseServer.rpc('sell_duplicate_atomic', {
         p_reward_identifier: cleanRewardIdentifier,
         p_user_id: cleanUserId,
       });
 
       if (error) {
-        console.error('Supabase sell_duplicate_atomic error:', error);
+        console.error('[SELL_DUPLICATE_RPC_ERROR]', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        });
         return NextResponse.json(
           { success: false, error: error.message || 'Ошибка базы данных при продаже предмета' },
           { status: 500 }
