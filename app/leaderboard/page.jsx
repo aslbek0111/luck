@@ -6,6 +6,7 @@ import { useUserData } from '../../hooks/useUserData';
 import GlassCard from '../../components/ui/GlassCard';
 import { ListItemSkeleton } from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
+import FemboyBadge from '../../components/ui/FemboyBadge';
 import { supabase, isSupabaseConfigured } from '../../lib/supabaseClient';
 import {
   Trophy,
@@ -378,8 +379,13 @@ export default function LeaderboardPage() {
                   {/* Name, VIP badge & Active Title */}
                   <div>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-xs font-black ${isRank1 ? 'text-yellow-300' : 'text-white'}`}>
+                      <span className={`text-xs font-black flex items-center ${isRank1 ? 'text-yellow-300' : 'text-white'}`}>
                         @{player.username}
+                        <FemboyBadge
+                          titleId={player.activeTitle?.id || player.active_title_id}
+                          titleSlug={player.activeTitle?.slug}
+                          size="xs"
+                        />
                       </span>
 
                       {isRank1 && (

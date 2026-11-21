@@ -4,10 +4,11 @@ import React from 'react';
 import Link from 'next/link';
 import { useUserData } from '../../hooks/useUserData';
 import { Skeleton } from '../ui/Skeleton';
+import FemboyBadge from '../ui/FemboyBadge';
 import { Sparkles, Trophy, Zap, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export default function HeroGreeting() {
-  const { user, stats, isAuthLoading, setIsBrowserAuthModalOpen } = useUserData();
+  const { user, stats, activeTitle, isAuthLoading, setIsBrowserAuthModalOpen } = useUserData();
 
   if (isAuthLoading) {
     return (
@@ -88,12 +89,13 @@ export default function HeroGreeting() {
         {/* Player Welcome */}
         <div className="flex items-start justify-between gap-4 mt-1">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2 flex-wrap">
               <span>Привет,</span>
-              <span className="gold-gradient-text-pure font-black">
-                {user.first_name || `@${user.username}`}!
+              <span className="gold-gradient-text-pure font-black inline-flex items-center">
+                {user.first_name || `@${user.username}`}
+                <FemboyBadge titleId={activeTitle?.id} titleSlug={activeTitle?.slug} size="md" />
               </span>
-              <span>🎄</span>
+              <span>! 🎄</span>
             </h1>
             <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-sm leading-relaxed">
               Рождественское Колесо Фортуны ждёт тебя! Собирай 15 праздничных артефактов, дари подарки друзьям и побеждай!

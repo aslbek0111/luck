@@ -15,6 +15,7 @@ export function UserDataProvider({ children }) {
   const [events, setEvents] = useState([]);
   const [giftsHistoryRaw, setGiftsHistoryRaw] = useState([]);
   const [purchasesHistoryRaw, setPurchasesHistoryRaw] = useState([]);
+  const [salesHistoryRaw, setSalesHistoryRaw] = useState([]);
   const [lastWinsRaw, setLastWinsRaw] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -71,6 +72,7 @@ export function UserDataProvider({ children }) {
           if (data.inventory) setInventoryRaw(data.inventory);
           if (data.giftsHistory) setGiftsHistoryRaw(data.giftsHistory);
           if (data.purchasesHistory) setPurchasesHistoryRaw(data.purchasesHistory);
+          if (data.salesHistory) setSalesHistoryRaw(data.salesHistory);
           if (data.lastWins) setLastWinsRaw(data.lastWins);
         }
       }
@@ -250,6 +252,7 @@ export function UserDataProvider({ children }) {
     setInventoryRaw([]);
     setLastWinsRaw([]);
     setGiftsHistoryRaw([]);
+    setSalesHistoryRaw([]);
     setNotifications([]);
     setUnreadCount(0);
     setLogoutNotice('Вы успешно вышли из аккаунта');
@@ -481,6 +484,45 @@ export function UserDataProvider({ children }) {
     [syncProfile, triggerHaptic]
   );
 
+  // Sell duplicate item for random Coins
+  const sellDuplicateItem = useCallback(
+    async (rewardId) => {
+      if (!currentUser) return { success: false, error: 'Пользователь не авторизован' };
+
+      try {
+        const res = await fetch('/api/inventory/sell', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rewardId }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          const newCoins = typeof data.coinsBalance === 'number' ? data.coinsBalance : data.coins_balance;
+          if (newCoins !== undefined) {
+            setCurrentUser((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    coins_balance: newCoins,
+                    points_balance: newCoins,
+                  }
+                : null
+            );
+          }
+          await syncProfile();
+          triggerHaptic('success');
+          return data;
+        }
+        triggerHaptic('error');
+        return data;
+      } catch (err) {
+        triggerHaptic('error');
+        return { success: false, error: err.message };
+      }
+    },
+    [currentUser, syncProfile, triggerHaptic]
+  );
+
   // Total stats calculations
   const stats = useMemo(() => {
     const totalRewardsCount = inventory.reduce((acc, curr) => acc + (curr.quantity || 1), 0);
@@ -525,6 +567,7 @@ export function UserDataProvider({ children }) {
       events,
       giftsHistory: giftsHistoryRaw,
       purchasesHistory: purchasesHistoryRaw,
+      salesHistory: salesHistoryRaw,
       lastWins,
       allUsers,
       stats,
@@ -548,6 +591,7 @@ export function UserDataProvider({ children }) {
       unequipTitle,
       sendGift,
       buyShopItem,
+      sellDuplicateItem,
       playSpin,
       checkDailySpins,
       useInventoryItem,
@@ -560,6 +604,7 @@ export function UserDataProvider({ children }) {
       events,
       giftsHistoryRaw,
       purchasesHistoryRaw,
+      salesHistoryRaw,
       lastWins,
       allUsers,
       stats,
@@ -579,6 +624,7 @@ export function UserDataProvider({ children }) {
       unequipTitle,
       sendGift,
       buyShopItem,
+      sellDuplicateItem,
       playSpin,
       checkDailySpins,
       useInventoryItem,

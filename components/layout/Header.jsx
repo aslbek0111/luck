@@ -4,6 +4,7 @@ import React, { useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useUserData } from '../../hooks/useUserData';
 import NotificationCenter from '../notifications/NotificationCenter';
+import FemboyBadge from '../ui/FemboyBadge';
 import { Coins, RotateCcw, ShieldCheck, Crown, Sparkles, Star, ShoppingBag } from 'lucide-react';
 
 function subscribeSnow(callback) {
@@ -126,9 +127,10 @@ export default function Header() {
           </div>
 
           <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-sm font-bold text-white group-hover:text-amber-300 transition-colors truncate max-w-[110px] sm:max-w-[160px]">
+            <div className="flex items-center gap-1 min-w-0">
+              <span className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors truncate max-w-[100px] sm:max-w-[160px] flex items-center">
                 @{user.username}
+                <FemboyBadge titleId={activeTitle?.id} titleSlug={activeTitle?.slug} size="xs" />
               </span>
               {activeTitle && (
                 <span
@@ -147,7 +149,7 @@ export default function Header() {
                 </span>
               )}
             </div>
-            <span className="text-[11px] text-zinc-400 flex items-center gap-1 truncate max-w-[120px] sm:max-w-[180px]">
+            <span className="text-[10px] sm:text-[11px] text-zinc-400 flex items-center gap-1 truncate max-w-[100px] sm:max-w-[180px]">
               {user.first_name} {user.last_name || ''}
             </span>
           </div>

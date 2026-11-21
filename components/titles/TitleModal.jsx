@@ -6,6 +6,7 @@ import { useUserData } from '../../hooks/useUserData';
 import { useTelegram } from '../../hooks/useTelegram';
 import RarityBadge from '../ui/RarityBadge';
 import GoldButton from '../ui/GoldButton';
+import FemboyBadge from '../ui/FemboyBadge';
 import {
   Crown,
   Baby,
@@ -107,14 +108,23 @@ export default function TitleModal({ title, isOpen, onClose }) {
 
           {/* Large Title Icon with Animated Aura */}
           <div
-            className="relative w-24 h-24 rounded-3xl flex items-center justify-center mb-4 border-2 p-4 transition-transform duration-300 hover:scale-105"
+            className="relative w-24 h-24 rounded-3xl flex items-center justify-center mb-4 border-2 p-3 transition-transform duration-300 hover:scale-105 overflow-hidden"
             style={{
               backgroundColor: `${title.accentColor}18`,
               borderColor: `${title.accentColor}88`,
               boxShadow: `0 0 35px ${title.accentColor}55`,
             }}
           >
-            <Icon className="w-14 h-14" style={{ color: title.accentColor }} />
+            {title.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={title.imageUrl}
+                alt={title.name}
+                className="w-full h-full object-cover rounded-2xl"
+              />
+            ) : (
+              <Icon className="w-14 h-14" style={{ color: title.accentColor }} />
+            )}
             {/* Shimmer line */}
             <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
               <div className="w-full h-full bg-gradient-to-tr from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_3s_infinite]" />
@@ -143,7 +153,10 @@ export default function TitleModal({ title, isOpen, onClose }) {
                 <span className="text-[10px] text-zinc-400">Как видят другие игроки</span>
               </div>
               <div className="flex items-center justify-center gap-2 p-2 rounded-xl bg-black/60 border border-zinc-800">
-                <span className="text-xs font-bold text-white">@{user?.username || 'player'}</span>
+                <span className="text-xs font-bold text-white flex items-center">
+                  @{user?.username || 'player'}
+                  <FemboyBadge titleId={title.id} titleSlug={title.slug} size="xs" />
+                </span>
                 <span
                   className="text-[11px] font-black uppercase px-2 py-0.5 rounded tracking-wider border shadow-sm"
                   style={{

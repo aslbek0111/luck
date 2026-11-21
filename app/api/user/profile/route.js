@@ -22,6 +22,7 @@ export async function GET(request) {
     let giftsHistory = [];
     let lastWins = [];
     let purchasesHistory = [];
+    let salesHistory = [];
     let nextDailySpinsAt = null;
     let secondsUntilNextSpins = 0;
 
@@ -187,6 +188,18 @@ export async function GET(request) {
       if (purData) {
         purchasesHistory = purData;
       }
+
+      // 6. Fetch sales history
+      const { data: salesData } = await supabaseServer
+        .from('sales_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (salesData) {
+        salesHistory = salesData;
+      }
     } else {
       if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_DEV_STORE) {
         return NextResponse.json({ success: false, error: 'База данных Supabase не настроена на сервере' }, { status: 503 });
@@ -217,6 +230,7 @@ export async function GET(request) {
 
       giftsHistory = mockStore.getGiftsHistory(user.id);
       purchasesHistory = mockStore.getPurchasesHistory(user.id);
+      salesHistory = mockStore.getSalesHistory(user.id);
 
       const userSpinsHistory = mockStore.getSpinsHistory(user.id);
       if (userSpinsHistory.length > 0) {
@@ -276,6 +290,7 @@ export async function GET(request) {
       inventory: rawInventory,
       giftsHistory,
       purchasesHistory: purchasesHistory || [],
+      salesHistory: salesHistory || [],
       lastWins,
       stats: {
         totalRewardsCount: rawInventory.reduce((acc, curr) => acc + (curr.quantity || 1), 0),

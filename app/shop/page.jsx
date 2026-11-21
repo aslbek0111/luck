@@ -393,7 +393,7 @@ export default function ShopPage() {
               <span className="text-[10px] text-cyan-300/80 font-bold uppercase tracking-wider block">Диапазон цен</span>
               <span className="text-sm font-black text-amber-300 font-mono flex items-center gap-1 justify-end">
                 <Coins className="w-4 h-4 fill-current" />
-                1200 – 1800 Монет
+                1200 – 2800 Монет
               </span>
             </div>
           </div>
@@ -601,7 +601,7 @@ export default function ShopPage() {
                   {/* Top: Icon + Rarity */}
                   <div className="flex items-center justify-between mb-2">
                     <div
-                      className="w-10 h-10 rounded-2xl flex items-center justify-center p-2 group-hover:scale-105 transition-transform shadow-inner border border-white/5"
+                      className="w-10 h-10 rounded-2xl flex items-center justify-center p-1.5 group-hover:scale-105 transition-transform shadow-inner border border-white/5 overflow-hidden shrink-0"
                       style={{
                         backgroundColor:
                           isProEpic
@@ -617,23 +617,32 @@ export default function ShopPage() {
                             : 'rgba(56,189,248,0.2)',
                       }}
                     >
-                      <Icon
-                        className="w-5 h-5"
-                        style={{
-                          color:
-                            isProEpic
-                              ? '#06b6d4'
-                              : item.rarity === 'legendary'
-                              ? '#f59e0b'
-                              : item.rarity === 'mythic'
-                              ? '#a855f7'
-                              : item.rarity === 'epic'
-                              ? '#ec4899'
-                              : item.rarity === 'uncommon'
-                              ? '#10b981'
-                              : '#38bdf8',
-                        }}
-                      />
+                      {item.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.imageUrl}
+                          alt={item.name}
+                          className="w-full h-full object-cover rounded-xl"
+                        />
+                      ) : (
+                        <Icon
+                          className="w-5 h-5"
+                          style={{
+                            color:
+                              isProEpic
+                                ? '#06b6d4'
+                                : item.rarity === 'legendary'
+                                ? '#f59e0b'
+                                : item.rarity === 'mythic'
+                                ? '#a855f7'
+                                : item.rarity === 'epic'
+                                ? '#ec4899'
+                                : item.rarity === 'uncommon'
+                                ? '#10b981'
+                                : '#38bdf8',
+                          }}
+                        />
+                      )}
                     </div>
                     <RarityBadge rarity={item.rarity} size="xs" />
                   </div>
@@ -709,11 +718,20 @@ export default function ShopPage() {
         >
           <div className="flex flex-col gap-3 py-1 text-left">
             <div className="flex items-center gap-3 p-3 rounded-2xl bg-zinc-900 border border-zinc-800">
-              <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 shrink-0">
-                {(() => {
-                  const Icon = ICON_MAP[selectedItemForPurchase.icon] || Gift;
-                  return <Icon className="w-6 h-6" />;
-                })()}
+              <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-400 shrink-0 overflow-hidden p-1">
+                {selectedItemForPurchase.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={selectedItemForPurchase.imageUrl}
+                    alt={selectedItemForPurchase.name}
+                    className="w-full h-full object-cover rounded-lg"
+                  />
+                ) : (
+                  (() => {
+                    const Icon = ICON_MAP[selectedItemForPurchase.icon] || Gift;
+                    return <Icon className="w-6 h-6" />;
+                  })()
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">

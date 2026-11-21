@@ -96,7 +96,16 @@ export default function TitleCard({ title, onInspect }) {
               boxShadow: `0 0 20px ${title.accentColor}30`,
             }}
           >
-            <Icon className="w-8 h-8" style={{ color: title.accentColor }} />
+            {title.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={title.imageUrl}
+                alt={title.name}
+                className="w-full h-full object-cover rounded-xl"
+              />
+            ) : (
+              <Icon className="w-8 h-8" style={{ color: title.accentColor }} />
+            )}
             {isProEpic && (
               <div className="absolute inset-0 bg-gradient-to-tr from-cyan-400/25 via-sky-400/15 to-fuchsia-400/25 animate-pulse pointer-events-none" />
             )}

@@ -113,10 +113,35 @@ export async function POST(request) {
         }
         const passwordHash = await bcrypt.hash(enteredPassword, 10);
         const fakeTgId = 1000000000 + Math.floor(Math.random() * 899999999);
+        const isAdminAccount = ADMIN_ACCOUNTS.some((a) => a.toLowerCase() === cleanUsername);
+        const isVipAccount = VIP_ACCOUNTS.some((v) => v.toLowerCase() === cleanUsername);
+
+        // Strict capacity limit: 100 standard accounts
+        if (!isAdminAccount && !isVipAccount) {
+          if (isServerSupabaseConfigured && supabaseServer) {
+            const { count, error: countErr } = await supabaseServer
+              .from('users')
+              .select('*', { count: 'exact', head: true })
+              .eq('is_vip', false);
+            if (!countErr && typeof count === 'number' && count >= 100) {
+              return NextResponse.json(
+                { success: false, error: 'Достигнут лимит стандартных слотов игроков (100 из 100). Регистрация новых стандартных аккаунтов завершена.' },
+                { status: 400 }
+              );
+            }
+          } else {
+            const currentUsers = mockStore.getAllUsers();
+            const standardCount = currentUsers.filter((u) => !u.is_vip).length;
+            if (standardCount >= 100) {
+              return NextResponse.json(
+                { success: false, error: 'Достигнут лимит стандартных слотов игроков (100 из 100). Регистрация новых стандартных аккаунтов завершена.' },
+                { status: 400 }
+              );
+            }
+          }
+        }
 
         if (isServerSupabaseConfigured && supabaseServer) {
-          const isAdminAccount = ADMIN_ACCOUNTS.some((a) => a.toLowerCase() === cleanUsername);
-          const isVipAccount = VIP_ACCOUNTS.some((v) => v.toLowerCase() === cleanUsername);
 
           const { data: newUser, error: insertErr } = await supabaseServer
             .from('users')

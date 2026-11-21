@@ -8,6 +8,7 @@ import GlassCard from '../../components/ui/GlassCard';
 import GoldButton from '../../components/ui/GoldButton';
 import RarityBadge from '../../components/ui/RarityBadge';
 import ConfirmModal from '../../components/ui/ConfirmModal';
+import FemboyBadge from '../../components/ui/FemboyBadge';
 import { CHRISTMAS_REWARDS, REWARDS_CATALOG, TITLES_LIST, RARITIES } from '../../lib/catalog-data';
 import {
   ShieldCheck,
@@ -426,7 +427,7 @@ export default function AdminPage() {
               <ShieldCheck className="w-6 h-6 text-amber-400" />
               <span>Панель VIP-Администратора</span>
             </h1>
-            <p className="text-xs text-zinc-400">Управление 14 слотами игроков, инвентарём, UC, спинами и слотом</p>
+            <p className="text-xs text-zinc-400">Управление 104 слотами игроков, инвентарём, UC, спинами и слотом</p>
           </div>
         </div>
 
@@ -460,7 +461,7 @@ export default function AdminPage() {
       {/* Core Admin Tabs */}
       <div className="flex gap-1.5 overflow-x-auto no-scrollbar border-b border-zinc-800 pb-2">
         {[
-          { id: 'users', label: '1. Игроки (14 слотов)', icon: Users },
+          { id: 'users', label: '1. Игроки (104 слота)', icon: Users },
           { id: 'inventory', label: '2. Каталог & Инвентарь (3x)', icon: Package },
           { id: 'gifts', label: '3. Выдача наград', icon: Gift },
           { id: 'spins', label: '4. Спины и UC', icon: RotateCcw },
@@ -490,17 +491,17 @@ export default function AdminPage() {
         })}
       </div>
 
-      {/* TAB 1: USERS & 12 SLOTS MANAGEMENT */}
+      {/* TAB 1: USERS & 104 SLOTS MANAGEMENT */}
       {activeTab === 'users' && (
         <div className="flex flex-col gap-4 animate-in fade-in duration-200">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <GlassCard className="p-3.5">
               <span className="text-[11px] text-zinc-400">Занято слотов</span>
               <div className="text-2xl font-black text-white mt-1">
-                {players.length} / 14
+                {players.length} / 104
               </div>
               <span className="text-[10px] text-amber-400 mt-0.5 block">
-                {Math.max(0, 14 - players.length)} слотов свободно
+                {Math.max(0, 104 - players.length)} слотов свободно
               </span>
             </GlassCard>
 
@@ -515,7 +516,7 @@ export default function AdminPage() {
             <GlassCard className="p-3.5">
               <span className="text-[11px] text-zinc-400">Standard игроки</span>
               <div className="text-2xl font-black text-sky-400 mt-1">
-                {standardPlayers.length} / 10
+                {standardPlayers.length} / 100
               </div>
               <span className="text-[10px] text-zinc-400 mt-0.5 block">0 UC баланс</span>
             </GlassCard>
@@ -545,7 +546,7 @@ export default function AdminPage() {
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
-                Все 14 слотов игроков ({players.length} из 14)
+                Все 104 слотов игроков ({players.length} из 104)
               </h3>
               <button
                 type="button"
@@ -587,7 +588,10 @@ export default function AdminPage() {
 
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-white">@{p.username}</span>
+                            <span className="text-sm font-bold text-white flex items-center">
+                              @{p.username}
+                              <FemboyBadge titleId={p.active_title_id} size="xs" />
+                            </span>
                             {isVip && (
                               <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-gradient-to-r from-amber-500/20 to-yellow-500/20 text-amber-300 border border-amber-400/50 flex items-center gap-0.5">
                                 <Crown className="w-2.5 h-2.5" /> VIP + ADMIN

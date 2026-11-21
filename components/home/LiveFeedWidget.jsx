@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useUserData } from '../../hooks/useUserData';
 import RarityBadge from '../ui/RarityBadge';
 import { ListItemSkeleton } from '../ui/Skeleton';
+import FemboyBadge from '../ui/FemboyBadge';
 import { Crown, Coins, Flower, Gift, Award, Sparkles, ChevronRight, Activity } from 'lucide-react';
 
 const ICON_MAP = {
@@ -72,8 +73,9 @@ export default function LiveFeedWidget() {
 
                   <div className="flex flex-col">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-xs font-black text-amber-300">
+                      <span className="text-xs font-black text-amber-300 flex items-center">
                         {evt.username}
+                        <FemboyBadge titleId={evt.userTitleId || evt.active_title_id} size="xs" />
                       </span>
                       <span className="text-xs text-zinc-400">получил</span>
                       <span className="text-xs font-bold text-white">

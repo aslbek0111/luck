@@ -10,6 +10,7 @@ import GoldButton from '../../components/ui/GoldButton';
 import RarityBadge from '../../components/ui/RarityBadge';
 import EmptyState from '../../components/ui/EmptyState';
 import Toast from '../../components/ui/Toast';
+import ConfirmModal from '../../components/ui/ConfirmModal';
 import {
   Package,
   Crown,
@@ -35,7 +36,20 @@ import {
   ShieldAlert,
   Coins,
   TreePine,
+  DollarSign,
+  TrendingUp,
 } from 'lucide-react';
+
+const RARITY_SELL_RANGES = {
+  common: { min: 5, max: 10, label: '5 – 10' },
+  uncommon: { min: 10, max: 20, label: '10 – 20' },
+  rare: { min: 20, max: 35, label: '20 – 35' },
+  epic: { min: 40, max: 55, label: '40 – 55' },
+  'pro-epic': { min: 80, max: 100, label: '80 – 100' },
+  pro_epic: { min: 80, max: 100, label: '80 – 100' },
+  mythic: { min: 150, max: 200, label: '150 – 200' },
+  legendary: { min: 250, max: 350, label: '250 – 350' },
+};
 
 const ICON_MAP = {
   Package,
@@ -58,15 +72,58 @@ const ICON_MAP = {
 };
 
 export default function InventoryPage() {
-  const { user, stats, inventory, activeTitle, equipTitle, unequipTitle, purchasesHistory, useInventoryItem } = useUserData();
+  const {
+    user,
+    stats,
+    inventory,
+    activeTitle,
+    equipTitle,
+    unequipTitle,
+    purchasesHistory,
+    salesHistory = [],
+    sellDuplicateItem,
+    useInventoryItem,
+  } = useUserData();
   const { triggerHaptic } = useTelegram();
 
-  // Tabs: 'all' | 'titles' | 'gifts' | 'history'
+  // Tabs: 'all' | 'titles' | 'gifts' | 'history' | 'sales'
   const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [equippingId, setEquippingId] = useState(null);
   const [usingItemId, setUsingItemId] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Duplicate selling state
+  const [sellingItem, setSellingItem] = useState(null);
+  const [isSelling, setIsSelling] = useState(false);
+
+  // Handle sell duplicate confirmed
+  const handleConfirmSell = async () => {
+    if (!sellingItem || isSelling) return;
+    setIsSelling(true);
+    try {
+      const res = await sellDuplicateItem(sellingItem.id);
+      if (res.success) {
+        setToastMessage({
+          type: 'success',
+          text: `Вы успешно продали «${res.rewardName || sellingItem.name}» и получили +${res.earnedCoins} Coins!`,
+        });
+      } else {
+        setToastMessage({
+          type: 'error',
+          text: res.error || 'Не удалось продать предмет',
+        });
+      }
+    } catch (err) {
+      setToastMessage({
+        type: 'error',
+        text: err.message || 'Ошибка при продаже предмета',
+      });
+    } finally {
+      setIsSelling(false);
+      setSellingItem(null);
+    }
+  };
 
   // Handle consumable item usage
   const handleUseItem = async (item) => {
@@ -236,58 +293,70 @@ export default function InventoryPage() {
       )}
 
       {/* Inventory Navigation Tabs */}
-      <div className="flex items-center gap-1.5 bg-zinc-900/80 p-1 rounded-2xl border border-zinc-800">
+      <div className="flex items-center gap-1 bg-zinc-900/80 p-1 rounded-2xl border border-zinc-800 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('all')}
-          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 min-w-[70px] py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
             activeTab === 'all'
               ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-md'
               : 'text-zinc-400 hover:text-white'
           }`}
         >
-          <Sparkles className="w-3.5 h-3.5" />
+          <Sparkles className="w-3.5 h-3.5 shrink-0" />
           <span>Все ({totalItemCount})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('titles')}
-          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 min-w-[80px] py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
             activeTab === 'titles'
               ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-md'
               : 'text-zinc-400 hover:text-white'
           }`}
         >
-          <Crown className="w-3.5 h-3.5" />
+          <Crown className="w-3.5 h-3.5 shrink-0" />
           <span>Титулы ({inventoryTitles.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('gifts')}
-          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 min-w-[80px] py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
             activeTab === 'gifts'
               ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-md'
               : 'text-zinc-400 hover:text-white'
           }`}
         >
-          <Gift className="w-3.5 h-3.5" />
+          <Gift className="w-3.5 h-3.5 shrink-0" />
           <span>Подарки ({inventoryGifts.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('history')}
-          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 min-w-[80px] py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
             activeTab === 'history'
               ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-md'
               : 'text-zinc-400 hover:text-white'
           }`}
         >
-          <Clock className="w-3.5 h-3.5" />
+          <Clock className="w-3.5 h-3.5 shrink-0" />
           <span>Покупки ({purchasesHistory.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('sales')}
+          className={`flex-1 min-w-[80px] py-2 px-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
+            activeTab === 'sales'
+              ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black shadow-md'
+              : 'text-zinc-400 hover:text-white'
+          }`}
+        >
+          <Coins className="w-3.5 h-3.5 shrink-0" />
+          <span>Продажи ({salesHistory.length})</span>
         </button>
       </div>
 
       {/* Search Input for items */}
-      {activeTab !== 'history' && (
+      {activeTab !== 'history' && activeTab !== 'sales' && (
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
@@ -348,7 +417,7 @@ export default function InventoryPage() {
 
                     <div className="flex items-start gap-3">
                       <div
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center p-2.5 shrink-0 border"
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center p-1.5 shrink-0 border overflow-hidden relative"
                         style={{
                           backgroundColor:
                             item.rarity === 'legendary'
@@ -368,25 +437,40 @@ export default function InventoryPage() {
                               : 'rgba(56,189,248,0.4)',
                         }}
                       >
-                        <Icon
-                          className="w-6 h-6"
-                          style={{
-                            color:
-                              item.rarity === 'legendary'
-                                ? '#f59e0b'
-                                : item.rarity === 'mythic'
-                                ? '#a855f7'
-                                : item.rarity === 'epic'
-                                ? '#ec4899'
-                                : '#38bdf8',
-                          }}
-                        />
+                        {item.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="w-full h-full object-cover rounded-xl"
+                          />
+                        ) : (
+                          <Icon
+                            className="w-6 h-6"
+                            style={{
+                              color:
+                                item.rarity === 'legendary'
+                                  ? '#f59e0b'
+                                  : item.rarity === 'mythic'
+                                  ? '#a855f7'
+                                  : item.rarity === 'epic'
+                                  ? '#ec4899'
+                                  : '#38bdf8',
+                            }}
+                          />
+                        )}
                       </div>
 
                       <div className="flex-1 min-w-0 pr-8">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h3 className="text-sm font-black text-white truncate">{item.name}</h3>
                           <RarityBadge rarity={item.rarity} size="xs" />
+                          {(item.quantity || 1) > 1 && (
+                            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm flex items-center gap-0.5">
+                              <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                              Дубликат (x{item.quantity})
+                            </span>
+                          )}
                         </div>
                         <p className="text-[11px] text-zinc-400 mt-0.5 line-clamp-2">
                           {item.description || item.conditions || 'Предмет инвентаря'}
@@ -395,7 +479,7 @@ export default function InventoryPage() {
                     </div>
 
                     {/* Bottom Action Row */}
-                    <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
+                    <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                         <span className="font-semibold">Количество:</span>
                         <span className="font-mono font-black text-white bg-zinc-800/80 px-2 py-0.5 rounded-lg border border-zinc-700/60">
@@ -403,7 +487,20 @@ export default function InventoryPage() {
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* Sell Duplicate button if quantity > 1 */}
+                        {(item.quantity || 1) > 1 && (
+                          <button
+                            onClick={() => setSellingItem(item)}
+                            type="button"
+                            className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-amber-500/15 border border-amber-500/40 text-amber-300 hover:bg-amber-500/25 transition-all flex items-center gap-1 cursor-pointer"
+                            title={`Продать 1 дубликат за ${(RARITY_SELL_RANGES[item.rarity] || RARITY_SELL_RANGES.common).label} Coins`}
+                          >
+                            <Coins className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Продать дубликат</span>
+                          </button>
+                        )}
+
                         {isTitle ? (
                           <button
                             onClick={() => handleToggleEquip(item)}
@@ -534,6 +631,87 @@ export default function InventoryPage() {
           )}
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: SALES HISTORY (ПРОДАЖА ДУБЛИКАТОВ)                                 */}
+      {/* ========================================================================= */}
+      {activeTab === 'sales' && (
+        <div className="flex flex-col gap-3 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+              <Coins className="w-4 h-4 text-amber-400 fill-current" />
+              История продаж дубликатов
+            </h3>
+            <span className="text-xs text-zinc-500">{salesHistory.length} записей</span>
+          </div>
+
+          {salesHistory.length === 0 ? (
+            <EmptyState
+              icon={Coins}
+              title="История продаж пуста"
+              description="Вы еще не продавали дубликаты предметов за Coins."
+            />
+          ) : (
+            <div className="flex flex-col gap-2">
+              {salesHistory.map((s) => (
+                <GlassCard key={s.id} className="p-3 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-2xl flex items-center justify-center p-2 shrink-0 bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      <Coins className="w-5 h-5 fill-current" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-white truncate">
+                          {s.reward_name || s.rewardName}
+                        </span>
+                        <RarityBadge rarity={s.reward_rarity || s.rewardRarity || 'common'} size="xs" />
+                      </div>
+                      <span className="text-[10px] text-zinc-500">
+                        {new Date(s.created_at || s.createdAt).toLocaleString('ru-RU', {
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-black text-amber-300 flex items-center gap-1 justify-end font-mono">
+                      +{s.earned_coins || s.earnedCoins} Coins 🪙
+                    </span>
+                    <span className="text-[9px] text-emerald-400 font-semibold block">
+                      Зачислено
+                    </span>
+                  </div>
+                </GlassCard>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Duplicate Selling Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(sellingItem)}
+        onClose={() => setSellingItem(null)}
+        onConfirm={handleConfirmSell}
+        isLoading={isSelling}
+        title="Продажа дубликата"
+        description={
+          sellingItem
+            ? `Вы уверены, что хотите продать 1 экземпляр «${sellingItem.name}» (${(sellingItem.rarity || 'common').toUpperCase()})? Вы получите случайную сумму от ${
+                (RARITY_SELL_RANGES[sellingItem.rarity] || RARITY_SELL_RANGES.common).min
+              } до ${
+                (RARITY_SELL_RANGES[sellingItem.rarity] || RARITY_SELL_RANGES.common).max
+              } Coins на свой баланс.`
+            : ''
+        }
+        confirmText="Продать за Coins"
+        variant="warning"
+      />
     </div>
   );
 }
