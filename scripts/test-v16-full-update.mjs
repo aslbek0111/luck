@@ -50,15 +50,15 @@ function selectReward() {
     const ucRoll = Math.random() * 1.3;
     if (ucRoll < 0.8) return { type: 'uc', value: 30 };
     return { type: 'uc', value: 60 };
-  } else if (roll < 69.6) {
+  } else if (roll < 67.6) {
     return { type: 'item', rarity: 'common' };
-  } else if (roll < 82.6) {
+  } else if (roll < 80.6) {
     return { type: 'item', rarity: 'uncommon' };
-  } else if (roll < 90.8) {
+  } else if (roll < 88.8) {
     return { type: 'item', rarity: 'rare' };
-  } else if (roll < 95.3) {
+  } else if (roll < 94.3) {
     return { type: 'item', rarity: 'epic' };
-  } else if (roll < 96.0) {
+  } else if (roll < 98.0) {
     return { type: 'item', rarity: 'mythic' };
   } else {
     return { type: 'item', rarity: 'legendary' };
@@ -77,15 +77,15 @@ for (let i = 0; i < N; i++) {
 console.log(`  Simulated ${N} spins:`);
 console.log(`  Coins: ${(counts.coins / N * 100).toFixed(2)}% (Target: ~46.0%)`);
 console.log(`  UC: ${(counts.uc / N * 100).toFixed(2)}% (Target: ~1.3%)`);
-console.log(`  Legendary: ${(counts.legendary / N * 100).toFixed(2)}% (Target: ~4.0%)`);
-console.log(`  Common: ${(counts.common / N * 100).toFixed(2)}% (Target: ~22.3%)`);
+console.log(`  Common: ${(counts.common / N * 100).toFixed(2)}% (Target: ~20.3%)`);
 console.log(`  Uncommon: ${(counts.uncommon / N * 100).toFixed(2)}% (Target: ~13.0%)`);
 console.log(`  Rare: ${(counts.rare / N * 100).toFixed(2)}% (Target: ~8.2%)`);
-console.log(`  Epic: ${(counts.epic / N * 100).toFixed(2)}% (Target: ~4.5%)`);
-console.log(`  Mythic: ${(counts.mythic / N * 100).toFixed(2)}% (Target: ~0.7%)`);
+console.log(`  Epic: ${(counts.epic / N * 100).toFixed(2)}% (Target: ~5.5%)`);
+console.log(`  Mythic: ${(counts.mythic / N * 100).toFixed(2)}% (Target: ~3.7%)`);
+console.log(`  Legendary: ${(counts.legendary / N * 100).toFixed(2)}% (Target: ~2.0%)`);
 
 const legRate = counts.legendary / N;
-assert(legRate >= 0.035 && legRate <= 0.046, 'Legendary drop rate should be ~4.0%');
+assert(legRate >= 0.015 && legRate <= 0.026, 'Legendary drop rate should be ~2.0%');
 const ucRate = counts.uc / N;
 assert(ucRate >= 0.010 && ucRate <= 0.016, 'UC drop rate should be ~1.3%');
 console.log('  ✓ Spin probability distribution verified!');

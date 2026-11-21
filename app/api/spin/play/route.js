@@ -22,37 +22,37 @@ function selectRouletteReward() {
   if (rand < 46.8) return REWARDS_CATALOG.find((r) => r.id === 'reward-uc-30') || REWARDS_CATALOG[0];
   if (rand < 47.3) return REWARDS_CATALOG.find((r) => r.id === 'reward-uc-60') || REWARDS_CATALOG[0];
 
-  // 3. Common items & titles: 22.3% (rand < 69.6)
-  if (rand < 69.6) {
+  // 3. Common items & titles: 20.3% (rand < 67.6)
+  if (rand < 67.6) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'common' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 4. Uncommon items & titles: 13.0% (rand < 82.6)
-  if (rand < 82.6) {
+  // 4. Uncommon items & titles: 13.0% (rand < 80.6)
+  if (rand < 80.6) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'uncommon' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 5. Rare items & titles (excluding UC): 8.2% (rand < 90.8)
-  if (rand < 90.8) {
+  // 5. Rare items & titles (excluding UC): 8.2% (rand < 88.8)
+  if (rand < 88.8) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'rare' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 6. Epic items & titles (excluding UC): 4.5% (rand < 95.3)
-  if (rand < 95.3) {
+  // 6. Epic items & titles (excluding UC): 5.5% (rand < 94.3)
+  if (rand < 94.3) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'epic' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 7. Mythic items & titles: 0.7% (rand < 96.0)
-  if (rand < 96.0) {
+  // 7. Mythic items & titles: 3.7% (rand < 98.0)
+  if (rand < 98.0) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'mythic' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 8. Legendary items & titles (including Santa): EXACTLY 4.0% (96.0 to 100.0)
+  // 8. Legendary items & titles (including Santa): EXACTLY 2.0% (98.0 to 100.0)
   const legPool = REWARDS_CATALOG.filter(
     (r) => r.rarity === 'legendary' && r.category !== 'coins' && r.category !== 'uc' && !r.isVipExclusive
   );
