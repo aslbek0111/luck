@@ -87,11 +87,85 @@ export async function POST(request) {
       return NextResponse.json({ success: false, error: 'Укажите action' }, { status: 400 });
     }
 
+    const PROTECTED_USERNAMES = ['vip5000x', 'vip2026z', 'vip7777m', 'vip9999k', 'admin', 'adminvip', 'lucky_admin'];
+
     if (isServerSupabaseConfigured && supabaseServer) {
+      if (action === 'delete_user') {
+        if (!targetUserId) return NextResponse.json({ success: false, error: 'Укажите targetUserId' }, { status: 400 });
+        const { data: target } = await supabaseServer
+          .from('users')
+          .select('id, username, is_vip, is_admin')
+          .eq('id', targetUserId)
+          .single();
+
+        if (!target) return NextResponse.json({ success: false, error: 'Пользователь не найден' }, { status: 404 });
+
+        if (
+          target.is_vip ||
+          target.is_admin ||
+          PROTECTED_USERNAMES.includes(target.username?.toLowerCase())
+        ) {
+          return NextResponse.json(
+            { success: false, error: 'Запрещено удалять защищенные системные аккаунты (VIP / Admin)' },
+            { status: 403 }
+          );
+        }
+
+        // Try atomic RPC first, fallback to manual cascade
+        const { data: rpcData, error: rpcErr } = await supabaseServer.rpc('admin_delete_user_atomic', {
+          p_admin_id: admin.id,
+          p_target_user_id: targetUserId,
+        });
+
+        if (!rpcErr && rpcData) {
+          if (!rpcData.success) {
+            return NextResponse.json({ success: false, error: rpcData.error }, { status: 400 });
+          }
+          return NextResponse.json(rpcData);
+        }
+
+        // Manual cascade fallback
+        await supabaseServer.from('user_inventory').delete().eq('user_id', targetUserId);
+        await supabaseServer.from('gifts_history').delete().or(`sender_id.eq.${targetUserId},recipient_id.eq.${targetUserId}`);
+        await supabaseServer.from('spins_history').delete().eq('user_id', targetUserId);
+        await supabaseServer.from('purchases_history').delete().eq('user_id', targetUserId);
+        await supabaseServer.from('sales_history').delete().eq('user_id', targetUserId);
+        await supabaseServer.from('notifications').delete().eq('user_id', targetUserId);
+        await supabaseServer.from('user_connections').delete().eq('user_id', targetUserId);
+        await supabaseServer.from('users').delete().eq('id', targetUserId);
+
+        await supabaseServer.from('admin_audit_logs').insert({
+          admin_id: admin.id,
+          action_type: 'delete_user',
+          target_user_id: targetUserId,
+          details: { username: target.username, deletedAt: new Date().toISOString() },
+        });
+
+        return NextResponse.json({ success: true, message: `Аккаунт @${target.username} успешно удален` });
+      }
+
       if (action === 'toggle_block') {
         if (!targetUserId) return NextResponse.json({ success: false, error: 'Укажите targetUserId' }, { status: 400 });
-        const { data: target } = await supabaseServer.from('users').select('is_blocked').eq('id', targetUserId).single();
-        const newStatus = !target?.is_blocked;
+        const { data: target } = await supabaseServer
+          .from('users')
+          .select('username, is_blocked, is_vip, is_admin')
+          .eq('id', targetUserId)
+          .single();
+
+        if (!target) return NextResponse.json({ success: false, error: 'Пользователь не найден' }, { status: 404 });
+
+        const newStatus = !target.is_blocked;
+
+        if (
+          newStatus &&
+          (target.is_vip || target.is_admin || PROTECTED_USERNAMES.includes(target.username?.toLowerCase()))
+        ) {
+          return NextResponse.json(
+            { success: false, error: 'Запрещено блокировать защищенные аккаунты (VIP / Admin)' },
+            { status: 403 }
+          );
+        }
+
         await supabaseServer.from('users').update({ is_blocked: newStatus }).eq('id', targetUserId);
 
         await supabaseServer.from('admin_audit_logs').insert({
@@ -234,12 +308,33 @@ export async function POST(request) {
         return NextResponse.json({ success: true, allUsers, targetUserId });
       }
     } else {
+      if (action === 'delete_user') {
+        if (!targetUserId) return NextResponse.json({ success: false, error: 'Укажите targetUserId' }, { status: 400 });
+        const result = mockStore.adminDeleteUser(admin.id, targetUserId);
+        if (!result.success) {
+          const status = result.error.includes('Запрещено') ? 403 : 400;
+          return NextResponse.json({ success: false, error: result.error }, { status });
+        }
+        return NextResponse.json(result);
+      }
+
       if (action === 'toggle_block') {
         if (!targetUserId) return NextResponse.json({ success: false, error: 'Укажите targetUserId' }, { status: 400 });
         const target = mockStore.getUserById(targetUserId);
         if (!target) return NextResponse.json({ success: false, error: 'Игрок не найден' }, { status: 404 });
 
         const newStatus = !target.is_blocked;
+
+        if (
+          newStatus &&
+          (target.is_vip || target.is_admin || PROTECTED_USERNAMES.includes(target.username?.toLowerCase()))
+        ) {
+          return NextResponse.json(
+            { success: false, error: 'Запрещено блокировать защищенные аккаунты (VIP / Admin)' },
+            { status: 403 }
+          );
+        }
+
         mockStore.updateUser(targetUserId, { is_blocked: newStatus });
 
         mockStore.addAdminAuditLog({

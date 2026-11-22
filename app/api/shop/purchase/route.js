@@ -19,7 +19,14 @@ export async function POST(request) {
     const userId = session.userId;
     const body = await request.json().catch(() => ({}));
     const rawItemId = body.itemId || body.itemSlug || body.rewardId;
-    const quantity = Math.max(1, parseInt(body.quantity, 10) || 1);
+    const parsedQty = parseInt(body.quantity, 10);
+    const quantity = isNaN(parsedQty) ? 1 : parsedQty;
+    if (quantity < 1 || quantity > 100) {
+      return NextResponse.json(
+        { success: false, error: 'Недопустимое количество предметов (разрешено от 1 до 100)' },
+        { status: 400 }
+      );
+    }
 
     if (!rawItemId) {
       return NextResponse.json(
@@ -65,10 +72,10 @@ export async function POST(request) {
           {
             success: false,
             error: rpcResult?.error || 'Не удалось совершить покупку',
-            requiredCoins: rpcResult?.required_coins ?? rpcResult?.required_points,
-            requiredPoints: rpcResult?.required_points,
-            currentCoins: rpcResult?.current_coins ?? rpcResult?.current_points,
-            currentPoints: rpcResult?.current_points,
+            requiredCoins: rpcResult?.required_coins ?? 0,
+            requiredPoints: 0,
+            currentCoins: rpcResult?.current_coins ?? 0,
+            currentPoints: rpcResult?.current_points ?? 0,
           },
           { status: 400 }
         );
@@ -77,10 +84,10 @@ export async function POST(request) {
       return NextResponse.json({
         success: true,
         item: rpcResult.item,
-        costCoins: rpcResult.cost_coins ?? rpcResult.cost_points,
-        costPoints: rpcResult.cost_points,
-        coinsBalance: rpcResult.coins_balance ?? rpcResult.points_balance,
-        coins_balance: rpcResult.coins_balance ?? rpcResult.points_balance,
+        costCoins: rpcResult.cost_coins ?? 0,
+        costPoints: 0,
+        coinsBalance: rpcResult.coins_balance,
+        coins_balance: rpcResult.coins_balance,
         pointsBalance: rpcResult.points_balance,
         points_balance: rpcResult.points_balance,
         isAdmin: rpcResult.is_admin,

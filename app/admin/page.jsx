@@ -33,18 +33,26 @@ import {
   Bell,
   Plus,
   Trash2,
+  Globe,
+  RefreshCw,
 } from 'lucide-react';
+
+const PROTECTED_ACCOUNTS = ['vip5000x', 'vip2026z', 'vip7777m', 'vip9999k', 'admin', 'adminvip', 'lucky_admin'];
 
 export default function AdminPage() {
   const router = useRouter();
   const { user, logout } = useUserData();
-  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'inventory' | 'gifts' | 'spins' | 'wheel' | 'notifications' | 'logs'
+  const [activeTab, setActiveTab] = useState('users'); // 'users' | 'inventory' | 'gifts' | 'spins' | 'wheel' | 'notifications' | 'connections' | 'logs'
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
   // Subsystems data
   const [players, setPlayers] = useState([]);
   const [codes, setCodes] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [connections, setConnections] = useState([]);
+  const [connectionsLoading, setConnectionsLoading] = useState(false);
+  const [connectionSearchQuery, setConnectionSearchQuery] = useState('');
+  const [userToDelete, setUserToDelete] = useState(null);
   const [wheelSegments, setWheelSegments] = useState([]);
   const [isWheelEnabled, setIsWheelEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -108,10 +116,39 @@ export default function AdminPage() {
           setLogs(lData.logs || []);
         }
       }
+
+      // Fetch connection history
+      try {
+        const connRes = await fetch('/api/admin/connections');
+        if (connRes.ok) {
+          const cData = await connRes.json();
+          if (cData.success) {
+            setConnections(cData.connections || []);
+          }
+        }
+      } catch {}
     } catch (err) {
       console.warn('Admin fetch notice:', err);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const fetchConnections = useCallback(async (query = '') => {
+    try {
+      setConnectionsLoading(true);
+      const url = query ? `/api/admin/connections?search=${encodeURIComponent(query)}` : '/api/admin/connections';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setConnections(data.connections || []);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch connections:', err);
+    } finally {
+      setConnectionsLoading(false);
     }
   }, []);
 
@@ -241,6 +278,34 @@ export default function AdminPage() {
       }
     } catch {
       setStatusMsg({ type: 'error', text: 'Ошибка отправки запроса' });
+    }
+  };
+
+  const handleDeleteUser = async (targetUser) => {
+    if (!targetUser) return;
+    try {
+      setLoading(true);
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_user',
+          targetUserId: targetUser.id,
+        }),
+      });
+      const data = await res.json();
+      setLoading(false);
+      setUserToDelete(null);
+      if (data.success) {
+        setStatusMsg({ type: 'success', text: data.message || `Аккаунт @${targetUser.username} успешно удален` });
+        fetchAdminData();
+      } else {
+        setStatusMsg({ type: 'error', text: data.error || 'Ошибка удаления аккаунта' });
+      }
+    } catch (err) {
+      setLoading(false);
+      setUserToDelete(null);
+      setStatusMsg({ type: 'error', text: err.message });
     }
   };
 
@@ -467,7 +532,8 @@ export default function AdminPage() {
           { id: 'spins', label: '4. Спины и UC', icon: RotateCcw },
           { id: 'wheel', label: '5. Слот-автомат', icon: Sparkles },
           { id: 'notifications', label: '6. Оповещения', icon: Bell },
-          { id: 'logs', label: '7. Аудит-логи', icon: FileText },
+          { id: 'connections', label: '7. История подключений игроков', icon: Globe },
+          { id: 'logs', label: '8. Аудит-логи', icon: FileText },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -477,6 +543,9 @@ export default function AdminPage() {
               onClick={() => {
                 setActiveTab(tab.id);
                 setStatusMsg(null);
+                if (tab.id === 'connections') {
+                  fetchConnections(connectionSearchQuery);
+                }
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
                 isActive
@@ -568,6 +637,7 @@ export default function AdminPage() {
                 {filteredPlayers.map((p) => {
                   const isVip = Boolean(p.is_vip);
                   const isAdm = Boolean(p.is_admin);
+                  const isProtected = isVip || isAdm || PROTECTED_ACCOUNTS.includes(p.username?.toLowerCase());
                   return (
                     <GlassCard key={p.id} className="p-3 flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -624,16 +694,35 @@ export default function AdminPage() {
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleToggleBlock(p.id)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                            p.is_blocked
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
-                              : 'bg-rose-500/15 text-rose-300 border border-rose-500/30 hover:bg-rose-500/25'
-                          }`}
-                        >
-                          {p.is_blocked ? 'Разблокировать' : 'Заблокировать'}
-                        </button>
+                        {isProtected ? (
+                          <span className="text-[10px] text-amber-400 font-bold px-2 py-1 bg-amber-500/10 border border-amber-400/30 rounded-lg flex items-center gap-1 shadow-sm">
+                            <ShieldCheck className="w-3 h-3 text-amber-400" />
+                            <span>Защищен</span>
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleBlock(p.id)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                p.is_blocked
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                                  : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'
+                              }`}
+                            >
+                              {p.is_blocked ? 'Разблокировать' : 'Заблокировать'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setUserToDelete(p)}
+                              className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-rose-500/15 text-rose-300 border border-rose-500/30 hover:bg-rose-500/25 transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                              title="Удалить аккаунт игрока"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Удалить</span>
+                            </button>
+                          </>
+                        )}
                       </div>
                     </GlassCard>
                   );
@@ -1118,7 +1207,130 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* TAB 7: AUDIT LOGS */}
+      {/* TAB 7: PLAYER CONNECTION HISTORY */}
+      {activeTab === 'connections' && (
+        <div className="flex flex-col gap-3 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+            <div>
+              <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-amber-400" />
+                История подключений игроков ({connections.length})
+              </h3>
+              <p className="text-[11px] text-zinc-400">
+                Автоматическое отслеживание IP-адресов при входе (с защитой от дублирования каждые 15 минут)
+              </p>
+            </div>
+            <button
+              onClick={() => fetchConnections(connectionSearchQuery)}
+              disabled={connectionsLoading}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-zinc-900 border border-zinc-700 text-zinc-300 hover:text-white hover:border-amber-400/50 flex items-center gap-1.5 cursor-pointer self-start sm:self-auto transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${connectionsLoading ? 'animate-spin text-amber-400' : ''}`} />
+              <span>Обновить</span>
+            </button>
+          </div>
+
+          {/* Search by username or IP */}
+          <div className="relative flex items-center">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3.5" />
+            <input
+              type="text"
+              value={connectionSearchQuery}
+              onChange={(e) => {
+                setConnectionSearchQuery(e.target.value);
+                fetchConnections(e.target.value);
+              }}
+              placeholder="Поиск по никнейму или IP-адресу (192.168, @username)..."
+              className="w-full pl-10 pr-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs placeholder:text-zinc-600 focus:outline-none focus:border-amber-400/60"
+            />
+          </div>
+
+          {connections.length === 0 ? (
+            <GlassCard className="p-6 text-center text-xs text-zinc-400">
+              {connectionsLoading ? 'Загрузка истории подключений...' : 'История подключений пока пуста'}
+            </GlassCard>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="hidden sm:grid grid-cols-12 gap-2 px-3 py-1 text-[11px] font-bold text-zinc-500 uppercase">
+                <div className="col-span-3">Игрок</div>
+                <div className="col-span-3">IP-Адрес</div>
+                <div className="col-span-2">Входов</div>
+                <div className="col-span-2">Статус</div>
+                <div className="col-span-2 text-right">Последний вход</div>
+              </div>
+
+              {connections.map((c) => {
+                const isBlocked = c.is_blocked || c.accountStatus === 'BLOCKED';
+                const isVip = c.is_vip || c.accountStatus?.includes('VIP');
+                const isAdm = c.is_admin || c.accountStatus?.includes('ADMIN');
+
+                return (
+                  <GlassCard key={c.id} className="p-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs">
+                      <div className="sm:col-span-3 flex items-center gap-2">
+                        <span className="font-bold text-white">@{c.username}</span>
+                        {isVip && (
+                          <span className="text-[9px] font-black px-1 rounded bg-amber-500/20 text-amber-300 border border-amber-400/40">
+                            VIP
+                          </span>
+                        )}
+                        {isAdm && (
+                          <span className="text-[9px] font-black px-1 rounded bg-rose-500/20 text-rose-300 border border-rose-400/40">
+                            ADMIN
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="sm:col-span-3 flex items-center gap-1.5 font-mono text-zinc-300">
+                        <Globe className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                        <span>{c.ip_address}</span>
+                      </div>
+
+                      <div className="sm:col-span-2 text-zinc-400">
+                        <span className="sm:hidden text-zinc-500 text-[10px] mr-1">Входов:</span>
+                        <span className="font-bold text-amber-300 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-400/20 text-[11px]">
+                          {c.connections_count}
+                        </span>
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        {isBlocked ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                            Заблокирован
+                          </span>
+                        ) : isVip ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">
+                            VIP
+                          </span>
+                        ) : isAdm ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-400/30">
+                            Admin
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            Активен
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="sm:col-span-2 text-right text-[11px] text-zinc-400 flex flex-col items-start sm:items-end">
+                        <span className="text-zinc-300">
+                          {c.last_seen_at ? new Date(c.last_seen_at).toLocaleDateString('ru-RU') : '—'}
+                        </span>
+                        <span className="text-[10px] text-zinc-500">
+                          {c.last_seen_at ? new Date(c.last_seen_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''}
+                        </span>
+                      </div>
+                    </div>
+                  </GlassCard>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 8: AUDIT LOGS */}
       {activeTab === 'logs' && (
         <div className="flex flex-col gap-3 animate-in fade-in duration-200">
           <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider px-1 flex items-center gap-1.5">
@@ -1172,6 +1384,20 @@ export default function AdminPage() {
         cancelText="Отмена"
         variant="danger"
       />
+
+      {/* Delete User Confirmation Modal */}
+      {userToDelete && (
+        <ConfirmModal
+          isOpen={Boolean(userToDelete)}
+          onClose={() => setUserToDelete(null)}
+          onConfirm={() => handleDeleteUser(userToDelete)}
+          title="Удаление аккаунта игрока"
+          description={`Вы уверены, что хотите БЕЗВОЗВРАТНО удалить аккаунт @${userToDelete.username}? Все данные игрока, инвентарь, титулы, история спинов и подарков будут полностью удалены из базы.`}
+          confirmText="Да, удалить навсегда"
+          cancelText="Отмена"
+          variant="danger"
+        />
+      )}
     </div>
   );
 }

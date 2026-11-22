@@ -564,7 +564,7 @@ export default function ShopPage() {
           {filteredItems.map((item) => {
             const Icon = ICON_MAP[item.icon] || Gift;
             const ownedQty = getOwnedQuantity(item.id);
-            const unitPrice = item.priceCoins || item.pricePoints || 100;
+            const unitPrice = Number(item.priceCoins ?? item.pricePoints ?? 100);
             const canAfford = isAdmin || userCoins >= unitPrice;
             const isTitle = item.isTitle || item.itemType === 'title' || item.category === 'titles';
             const isProEpic = item.rarity === 'pro-epic';
@@ -754,7 +754,7 @@ export default function ShopPage() {
                   <Coins className="w-3.5 h-3.5 fill-current text-amber-400" />
                   {isAdmin
                     ? '0 Монет (Бесплатно для Admin)'
-                    : `${selectedItemForPurchase.priceCoins || selectedItemForPurchase.pricePoints} Монет`}
+                    : `${Number(selectedItemForPurchase.priceCoins ?? selectedItemForPurchase.pricePoints ?? 100)} Монет`}
                 </span>
               </div>
 
@@ -771,7 +771,7 @@ export default function ShopPage() {
                   <span>Остаток после покупки:</span>
                   <span className="font-black text-emerald-400 flex items-center gap-1">
                     <Coins className="w-3.5 h-3.5 fill-current text-amber-400" />
-                    {userCoins - (selectedItemForPurchase.priceCoins || selectedItemForPurchase.pricePoints || 100)} Монет
+                    {userCoins - Number(selectedItemForPurchase.priceCoins ?? selectedItemForPurchase.pricePoints ?? 100)} Монет
                   </span>
                 </div>
               )}

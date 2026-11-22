@@ -60,7 +60,8 @@ async function handleDailySpins(request) {
 
     const result = mockStore.checkAndGrantDailySpins(userId);
     if (!result.success) {
-      return NextResponse.json({ success: false, error: result.error }, { status: 400 });
+      const isBlocked = result.error && (result.error.includes('заблокирован') || result.error.includes('blocked'));
+      return NextResponse.json({ success: false, error: result.error }, { status: isBlocked ? 403 : 400 });
     }
 
     return NextResponse.json({

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/session';
 import { supabaseServer, isServerSupabaseConfigured } from '@/lib/supabaseServer';
 import { mockStore } from '@/lib/mock-store';
+import { getClientIp } from '@/lib/ip-utils';
 
 export async function GET(request) {
   try {
@@ -35,6 +36,44 @@ export async function GET(request) {
 
     if (!user) {
       return createResponse({ success: true, authenticated: false, user: null }, 200);
+    }
+
+    // Strict ban enforcement: Blocked user cannot authenticate or perform actions
+    if (user.is_blocked) {
+      const blockedRes = createResponse(
+        {
+          success: false,
+          authenticated: false,
+          is_blocked: true,
+          error: 'Ваш аккаунт заблокирован администратором',
+          user: null,
+        },
+        403
+      );
+      // Immediately revoke cookie
+      blockedRes.cookies.set('lucky_session', '', { maxAge: 0, path: '/' });
+      return blockedRes;
+    }
+
+    // Background connection tracking (with reverse-proxy support and 15-min deduplication)
+    try {
+      const clientIp = getClientIp(request);
+      const userAgent = request.headers.get('user-agent') || '';
+
+      if (clientIp) {
+        if (isServerSupabaseConfigured && supabaseServer) {
+          supabaseServer.rpc('log_user_connection', {
+            p_user_id: user.id,
+            p_username: user.username,
+            p_ip: clientIp,
+            p_user_agent: userAgent,
+          }).then(() => {}).catch(() => {});
+        } else {
+          mockStore.logUserConnection(user.id, user.username, clientIp, userAgent);
+        }
+      }
+    } catch {
+      // Non-blocking for auth response
     }
 
     const sanitizedUser = { ...user };
