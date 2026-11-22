@@ -205,24 +205,16 @@ BEGIN
             v_user_rec.coins_balance, v_user_rec.points_balance, v_user_rec.total_uc;
     END LOOP;
 
-    -- Audit status of rubix0 and xronix7
+    -- Audit status of target purge accounts (rubix0, xronix7, xuronix7, 444)
     FOR v_user_rec IN 
         SELECT id, username, is_admin, is_vip, coins_balance, points_balance, total_uc 
         FROM public.users 
-        WHERE LOWER(TRIM(username)) IN ('rubix0', 'xronix7')
+        WHERE LOWER(TRIM(username)) IN ('rubix0', 'xronix7', 'xuronix7', '444')
     LOOP
-        IF LOWER(TRIM(v_user_rec.username)) = 'rubix0' THEN
-            v_rubix_status := format('Найден (ID: %s, Admin: %s, VIP: %s, Coins: %s, PP: %s, UC: %s)',
-                v_user_rec.id, v_user_rec.is_admin, v_user_rec.is_vip, v_user_rec.coins_balance, v_user_rec.points_balance, v_user_rec.total_uc);
-        END IF;
-        IF LOWER(TRIM(v_user_rec.username)) = 'xronix7' THEN
-            v_xronix_status := format('Найден (ID: %s, Admin: %s, VIP: %s, Coins: %s, PP: %s, UC: %s)',
-                v_user_rec.id, v_user_rec.is_admin, v_user_rec.is_vip, v_user_rec.coins_balance, v_user_rec.points_balance, v_user_rec.total_uc);
-        END IF;
+        RAISE NOTICE 'Статус целевого аккаунта @%: Найден (ID: %, Admin: %, VIP: %, Coins: %, PP: %, UC: %)',
+            v_user_rec.username, v_user_rec.id, v_user_rec.is_admin, v_user_rec.is_vip,
+            v_user_rec.coins_balance, v_user_rec.points_balance, v_user_rec.total_uc;
     END LOOP;
-
-    RAISE NOTICE 'Статус rubix0: %', v_rubix_status;
-    RAISE NOTICE 'Статус xronix7: %', v_xronix_status;
     RAISE NOTICE '================================================================';
 END $$;
 
@@ -1057,7 +1049,8 @@ REVOKE ALL ON FUNCTION public.admin_toggle_block_user(UUID, UUID, BOOLEAN) FROM 
 GRANT EXECUTE ON FUNCTION public.admin_toggle_block_user(UUID, UUID, BOOLEAN) TO authenticated, service_role;
 
 -- ------------------------------------------------------------------------------
--- 5. ACCOUNT PURGE FOR rubix0 AND xronix7 (COMPREHENSIVE WIPE OF GAME PROGRESS)
+-- 5. ACCOUNT PURGE FOR rubix0, xronix7, xuronix7, AND 444
+-- (COMPLETE WIPE OF INVENTORY, UC, SPINS, BALANCES, AND GAME PROGRESS)
 -- ------------------------------------------------------------------------------
 DO $$
 DECLARE
@@ -1067,7 +1060,7 @@ BEGIN
     FOR v_target_user IN 
         SELECT id, username, is_admin, is_vip 
         FROM public.users 
-        WHERE LOWER(TRIM(username)) IN ('rubix0', 'xronix7')
+        WHERE LOWER(TRIM(username)) IN ('rubix0', 'xronix7', 'xuronix7', '444')
     LOOP
         -- If account is VIP or ADMIN, skip completely and emit NOTICE
         IF v_target_user.is_admin IS TRUE 
@@ -1078,7 +1071,7 @@ BEGIN
             CONTINUE;
         END IF;
 
-        -- 1. Delete inventory & history (safely checking table and column existence)
+        -- 1. Completely delete inventory & history
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'user_inventory' AND column_name = 'user_id') THEN
             DELETE FROM public.user_inventory WHERE user_id = v_target_user.id;
         END IF;
@@ -1107,7 +1100,7 @@ BEGIN
             DELETE FROM public.popularity_transactions WHERE user_id = v_target_user.id;
         END IF;
 
-        -- 2. Reset currencies, title, and progress
+        -- 2. Reset currencies, title, UC, and spins to 0
         UPDATE public.users
         SET points_balance = 0,
             coins_balance = 0,
@@ -1116,7 +1109,7 @@ BEGIN
             updated_at = NOW()
         WHERE id = v_target_user.id;
 
-        -- Safely reset optional game progress columns if they exist
+        -- Safely reset all spin columns to 0
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'total_popularity') THEN
             UPDATE public.users SET total_popularity = 0 WHERE id = v_target_user.id;
         END IF;
@@ -1124,7 +1117,7 @@ BEGIN
             UPDATE public.users SET spins_count = 0 WHERE id = v_target_user.id;
         END IF;
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'spins_left') THEN
-            UPDATE public.users SET spins_left = 3 WHERE id = v_target_user.id;
+            UPDATE public.users SET spins_left = 0 WHERE id = v_target_user.id;
         END IF;
         IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'daily_spins_count') THEN
             UPDATE public.users SET daily_spins_count = 0 WHERE id = v_target_user.id;
@@ -1134,12 +1127,12 @@ BEGIN
         END IF;
 
         v_purged_count := v_purged_count + 1;
-        RAISE NOTICE 'ОЧИСТКА ВЫПОЛНЕНА: Аккаунт @% (%) полностью очищен (Coins=0, PP=0, UC=0)', 
+        RAISE NOTICE 'ОЧИСТКА ВЫПОЛНЕНА: Аккаунт @% (%) полностью очищен (UC=0, Спины=0, Инвентарь удален)', 
             v_target_user.username, v_target_user.id;
     END LOOP;
 
     IF v_purged_count = 0 THEN
-        RAISE NOTICE 'ИНФОРМАЦИЯ: Аккаунты rubix0 / xronix7 не найдены или защищены от очистки';
+        RAISE NOTICE 'ИНФОРМАЦИЯ: Аккаунты rubix0 / xronix7 / xuronix7 / 444 не найдены или защищены от очистки';
     END IF;
 END $$;
 

@@ -258,7 +258,7 @@ console.log('\n================================================================'
 console.log('7. VERIFYING ACCOUNT PURGE & CURRENCY RESET WITH VIP PRESERVATION');
 console.log('================================================================');
 
-// Ensure rubix0 and xronix7 purged if created
+// Ensure rubix0, xronix7, xuronix7, and 444 purged if created
 mockStore.addUser({
   id: 'user-rubix0-test',
   username: 'rubix0',
@@ -277,18 +277,52 @@ mockStore.addUser({
   is_admin: false,
   is_vip: false,
 });
+mockStore.addUser({
+  id: 'user-xuronix7-test',
+  username: 'xuronix7',
+  coins_balance: 777,
+  points_balance: 777,
+  total_uc: 777,
+  is_admin: false,
+  is_vip: false,
+});
+mockStore.addUser({
+  id: 'user-444-test',
+  username: '444',
+  coins_balance: 444,
+  points_balance: 444,
+  total_uc: 444,
+  is_admin: false,
+  is_vip: false,
+});
 
-const purgeRes = mockStore.purgeTargetAccounts(['rubix0', 'xronix7']);
+// Give them items in inventory
+const inv = mockStore.getInventory();
+inv['user-rubix0-test'] = [{ id: 'item-1', name: 'Test' }];
+inv['user-xuronix7-test'] = [{ id: 'item-2', name: 'Test' }];
+inv['user-444-test'] = [{ id: 'item-3', name: 'Test' }];
+mockStore.saveInventory(inv);
+
+const purgeRes = mockStore.purgeTargetAccounts(['rubix0', 'xronix7', 'xuronix7', '444']);
 assert(purgeRes.success, 'purgeTargetAccounts executed');
 
 const rubix = mockStore.getUserByUsername('rubix0');
-assert(rubix.points_balance === 0 && rubix.total_uc === 0, 'rubix0 balances completely wiped to 0');
-const xronix = mockStore.getUserByUsername('xronix7');
-assert(xronix.points_balance === 0 && xronix.total_uc === 0, 'xronix7 balances completely wiped to 0');
+assert(rubix.points_balance === 0 && rubix.total_uc === 0 && rubix.free_spins_balance === 0, 'rubix0 UC, PP, and spins completely wiped to 0');
+assert((mockStore.getInventory()['user-rubix0-test'] || []).length === 0, 'rubix0 inventory completely emptied');
+
+const xuronix = mockStore.getUserByUsername('xuronix7');
+assert(xuronix.points_balance === 0 && xuronix.total_uc === 0 && xuronix.free_spins_balance === 0, 'xuronix7 UC, PP, and spins completely wiped to 0');
+assert((mockStore.getInventory()['user-xuronix7-test'] || []).length === 0, 'xuronix7 inventory completely emptied');
+
+const user444 = mockStore.getUserByUsername('444');
+assert(user444.points_balance === 0 && user444.total_uc === 0 && user444.free_spins_balance === 0, '444 UC, PP, and spins completely wiped to 0');
+assert((mockStore.getInventory()['user-444-test'] || []).length === 0, '444 inventory completely emptied');
 
 // Clean them up from test store
 mockStore.adminDeleteUser(adminUser.id, rubix.id);
-mockStore.adminDeleteUser(adminUser.id, xronix.id);
+mockStore.adminDeleteUser(adminUser.id, mockStore.getUserByUsername('xronix7').id);
+mockStore.adminDeleteUser(adminUser.id, xuronix.id);
+mockStore.adminDeleteUser(adminUser.id, user444.id);
 
 // Add standard player with coins and PP/UC
 const stdUser = {

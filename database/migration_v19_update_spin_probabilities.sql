@@ -8,15 +8,15 @@
 --    - 50 Coins:  13.0%
 --    - 75 Coins:   6.0%
 --    - 125 Coins:  3.0%
--- 2. UC (unchanged): 1.3% total
---    - 30 UC: 0.8%
---    - 60 UC: 0.5%
--- 3. Common (items & titles): 20.3%
+-- 2. UC: 0.05% total
+--    - 30 UC: 0.03%
+--    - 60 UC: 0.02%
+-- 3. Common (items & titles): 22.05%
 -- 4. Uncommon (items & titles): 13.0%
 -- 5. Rare (items & titles without UC): 8.2%
 -- 6. Epic (items & titles without UC): 5.5%
 -- 7. Mythic (items & titles): 3.7%
--- 8. Legendary (items & titles): 2.0%
+-- 8. Legendary (items & titles): 1.5%
 -- ==============================================================================
 
 CREATE OR REPLACE FUNCTION public.play_spin_atomic(
@@ -89,35 +89,35 @@ BEGIN
                 SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000054' AND is_active = TRUE;
             END IF;
         
-        -- 2. UC - Unchanged current probability (1.3% total)
-        ELSIF v_rand < 47.3 THEN
-            IF v_rand < 46.8 THEN
+        -- 2. UC - Updated probability (0.05% total)
+        ELSIF v_rand < 46.05 THEN
+            IF v_rand < 46.03 THEN
                 SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000001' AND is_active = TRUE;
             ELSE
                 SELECT * INTO v_reward FROM public.rewards_catalog WHERE id = '10000000-0000-0000-0000-000000000002' AND is_active = TRUE;
             END IF;
         
-        -- 3. Common items & titles: 20.3% (47.3 to 67.6)
-        ELSIF v_rand < 67.6 THEN
+        -- 3. Common items & titles: 22.05% (46.05 to 68.10)
+        ELSIF v_rand < 68.10 THEN
             SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'common' AND category <> 'coins' AND category <> 'uc' AND is_active = TRUE ORDER BY random() LIMIT 1;
         
-        -- 4. Uncommon items & titles: 13.0% (67.6 to 80.6)
-        ELSIF v_rand < 80.6 THEN
+        -- 4. Uncommon items & titles: 13.0% (68.10 to 81.10)
+        ELSIF v_rand < 81.10 THEN
             SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'uncommon' AND category <> 'coins' AND category <> 'uc' AND is_active = TRUE ORDER BY random() LIMIT 1;
         
-        -- 5. Rare items & titles: 8.2% (80.6 to 88.8)
-        ELSIF v_rand < 88.8 THEN
+        -- 5. Rare items & titles: 8.2% (81.10 to 89.30)
+        ELSIF v_rand < 89.30 THEN
             SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'rare' AND category <> 'coins' AND category <> 'uc' AND is_active = TRUE ORDER BY random() LIMIT 1;
         
-        -- 6. Epic items & titles: 5.5% (88.8 to 94.3)
-        ELSIF v_rand < 94.3 THEN
+        -- 6. Epic items & titles: 5.5% (89.30 to 94.80)
+        ELSIF v_rand < 94.80 THEN
             SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'epic' AND category <> 'coins' AND category <> 'uc' AND is_active = TRUE ORDER BY random() LIMIT 1;
         
-        -- 7. Mythic items & titles: 3.7% (94.3 to 98.0)
-        ELSIF v_rand < 98.0 THEN
+        -- 7. Mythic items & titles: 3.7% (94.80 to 98.50)
+        ELSIF v_rand < 98.50 THEN
             SELECT * INTO v_reward FROM public.rewards_catalog WHERE rarity = 'mythic' AND category <> 'coins' AND category <> 'uc' AND is_active = TRUE ORDER BY random() LIMIT 1;
         
-        -- 8. Legendary items & titles (EXACTLY 2.0%: 98.0 to 100.0)
+        -- 8. Legendary items & titles (EXACTLY 1.5%: 98.50 to 100.0)
         ELSE
             SELECT * INTO v_reward FROM public.rewards_catalog 
             WHERE rarity = 'legendary' AND category <> 'coins' AND category <> 'uc' 

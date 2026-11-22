@@ -16,43 +16,43 @@ function selectRouletteReward() {
   if (rand < 43.0) return REWARDS_CATALOG.find((r) => r.id === 'reward-coins-75') || REWARDS_CATALOG[0];
   if (rand < 46.0) return REWARDS_CATALOG.find((r) => r.id === 'reward-coins-125') || REWARDS_CATALOG[0];
 
-  // 2. UC - Unchanged current probability (1.3% total):
-  // 30 UC: 0.8% (rand < 46.8)
-  // 60 UC: 0.5% (rand < 47.3)
-  if (rand < 46.8) return REWARDS_CATALOG.find((r) => r.id === 'reward-uc-30') || REWARDS_CATALOG[0];
-  if (rand < 47.3) return REWARDS_CATALOG.find((r) => r.id === 'reward-uc-60') || REWARDS_CATALOG[0];
+  // 2. UC - Updated probability (0.05% total):
+  // 30 UC: 0.03% (rand < 46.03)
+  // 60 UC: 0.02% (rand < 46.05)
+  if (rand < 46.03) return REWARDS_CATALOG.find((r) => r.id === 'reward-uc-30') || REWARDS_CATALOG[0];
+  if (rand < 46.05) return REWARDS_CATALOG.find((r) => r.id === 'reward-uc-60') || REWARDS_CATALOG[0];
 
-  // 3. Common items & titles: 20.3% (rand < 67.6)
-  if (rand < 67.6) {
+  // 3. Common items & titles: 22.05% (rand < 68.10)
+  if (rand < 68.10) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'common' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 4. Uncommon items & titles: 13.0% (rand < 80.6)
-  if (rand < 80.6) {
+  // 4. Uncommon items & titles: 13.0% (rand < 81.10)
+  if (rand < 81.10) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'uncommon' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 5. Rare items & titles (excluding UC): 8.2% (rand < 88.8)
-  if (rand < 88.8) {
+  // 5. Rare items & titles (excluding UC): 8.2% (rand < 89.30)
+  if (rand < 89.30) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'rare' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 6. Epic items & titles (excluding UC): 5.5% (rand < 94.3)
-  if (rand < 94.3) {
+  // 6. Epic items & titles (excluding UC): 5.5% (rand < 94.80)
+  if (rand < 94.80) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'epic' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 7. Mythic items & titles: 3.7% (rand < 98.0)
-  if (rand < 98.0) {
+  // 7. Mythic items & titles: 3.7% (rand < 98.50)
+  if (rand < 98.50) {
     const pool = REWARDS_CATALOG.filter((r) => r.rarity === 'mythic' && r.category !== 'coins' && r.category !== 'uc');
     return pool[Math.floor(Math.random() * pool.length)] || REWARDS_CATALOG[0];
   }
 
-  // 8. Legendary items & titles (including Santa): EXACTLY 2.0% (98.0 to 100.0)
+  // 8. Legendary items & titles (including Santa): EXACTLY 1.5% (98.50 to 100.0)
   const legPool = REWARDS_CATALOG.filter(
     (r) => r.rarity === 'legendary' && r.category !== 'coins' && r.category !== 'uc' && !r.isVipExclusive
   );
