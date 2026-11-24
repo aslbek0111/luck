@@ -185,10 +185,54 @@ export function UserDataProvider({ children }) {
         return {
           ...(catalogItem || {}),
           ...item,
+          quantity: typeof item.quantity === 'number' && item.quantity >= 0 ? item.quantity : 1,
         };
       })
       .filter((it) => it.id);
   }, [inventoryRaw]);
+
+  // Normalized purchases history for full API & frontend compatibility
+  const purchasesHistory = useMemo(() => {
+    return purchasesHistoryRaw.map((p) => {
+      const rawDate = p.purchased_at || p.purchasedAt || p.created_at || p.createdAt || null;
+      const isAdminBuy = Boolean(p.isAdminPurchase || p.is_admin_purchase || p.is_admin || p.isAdmin);
+      // Strictly separate Coins and Points costs to preserve historical transaction currency
+      const coinsCost = p.costCoins ?? p.cost_coins ?? 0;
+      const pointsCost = p.costPoints ?? p.cost_points ?? 0;
+      // Determine currency: if historical record has points cost without coins, it was a Points purchase
+      const isPointsTransaction = p.currency === 'points' || (pointsCost > 0 && coinsCost === 0);
+      const currency = isPointsTransaction ? 'points' : 'coins';
+
+      return {
+        ...p,
+        id: p.id,
+        userId: p.userId || p.user_id,
+        user_id: p.user_id || p.userId,
+        rewardId: p.rewardId || p.reward_id || p.item_id,
+        reward_id: p.reward_id || p.rewardId || p.item_id,
+        itemId: p.item_id || p.itemId || p.rewardId || p.reward_id,
+        item_id: p.item_id || p.itemId || p.reward_id || p.rewardId,
+        itemName: p.itemName || p.item_name || 'Предмет',
+        item_name: p.item_name || p.itemName || 'Предмет',
+        itemType: p.itemType || p.item_type || 'gift',
+        item_type: p.item_type || p.itemType || 'gift',
+        quantity: typeof p.quantity === 'number' && p.quantity >= 0 ? p.quantity : 1,
+        costCoins: coinsCost,
+        cost_coins: coinsCost,
+        costPoints: pointsCost,
+        cost_points: pointsCost,
+        currency,
+        isAdminPurchase: isAdminBuy,
+        is_admin_purchase: isAdminBuy,
+        is_admin: isAdminBuy,
+        isAdmin: isAdminBuy,
+        purchasedAt: rawDate,
+        purchased_at: rawDate,
+        createdAt: rawDate,
+        created_at: rawDate,
+      };
+    });
+  }, [purchasesHistoryRaw]);
 
   // Last wins
   const lastWins = useMemo(() => {
@@ -498,13 +542,14 @@ export function UserDataProvider({ children }) {
         const data = await res.json();
         if (data.success) {
           const newCoins = typeof data.coinsBalance === 'number' ? data.coinsBalance : data.coins_balance;
+          const newPoints = typeof data.pointsBalance === 'number' ? data.pointsBalance : (typeof data.points_balance === 'number' ? data.points_balance : undefined);
           if (newCoins !== undefined) {
             setCurrentUser((prev) =>
               prev
                 ? {
                     ...prev,
                     coins_balance: newCoins,
-                    points_balance: newCoins,
+                    ...(newPoints !== undefined ? { points_balance: newPoints } : {}),
                   }
                 : null
             );
@@ -525,7 +570,7 @@ export function UserDataProvider({ children }) {
 
   // Total stats calculations
   const stats = useMemo(() => {
-    const totalRewardsCount = inventory.reduce((acc, curr) => acc + (curr.quantity || 1), 0);
+    const totalRewardsCount = inventory.reduce((acc, curr) => acc + (typeof curr.quantity === 'number' && curr.quantity >= 0 ? curr.quantity : 1), 0);
     const uniqueRewardsCount = inventory.length;
     const achievementsCount = Math.min(15, Math.floor((currentUser?.spins_count || 0) / 10) + uniqueRewardsCount);
     const isVipAdmin = Boolean(currentUser?.is_admin && currentUser?.is_vip);
@@ -535,6 +580,10 @@ export function UserDataProvider({ children }) {
     const rawCoins = isVip || isAdmin
       ? (typeof currentUser?.coins_balance === 'number' ? Math.max(currentUser.coins_balance, 1000) : 1000)
       : (typeof currentUser?.coins_balance === 'number' ? currentUser.coins_balance : 0);
+
+    const rawPoints = isVip || isAdmin
+      ? (typeof currentUser?.points_balance === 'number' ? Math.max(currentUser.points_balance, 1000) : 1000)
+      : (typeof currentUser?.points_balance === 'number' ? currentUser.points_balance : 0);
 
     const rawUc = (isVip || isAdmin)
       ? (typeof currentUser?.total_uc === 'number' ? Math.max(currentUser.total_uc, 5000) : 5000)
@@ -551,9 +600,9 @@ export function UserDataProvider({ children }) {
       pp: rawPopularity,
       freeSpins: (isVipAdmin || isAdmin) ? Infinity : (currentUser?.free_spins_balance || 0),
       coinsBalance: isVipAdmin || isAdmin ? Infinity : rawCoins,
-      pointsBalance: isVipAdmin || isAdmin ? Infinity : rawCoins,
+      pointsBalance: isVipAdmin || isAdmin ? Infinity : rawPoints,
       rawCoinsBalance: rawCoins,
-      rawPointsBalance: rawCoins,
+      rawPointsBalance: rawPoints,
       nextDailySpinsAt: currentUser?.next_daily_spins_at || null,
       secondsUntilNextSpins: currentUser?.seconds_until_next_spins || 0,
     };
@@ -566,7 +615,7 @@ export function UserDataProvider({ children }) {
       inventory,
       events,
       giftsHistory: giftsHistoryRaw,
-      purchasesHistory: purchasesHistoryRaw,
+      purchasesHistory,
       salesHistory: salesHistoryRaw,
       lastWins,
       allUsers,
@@ -603,7 +652,7 @@ export function UserDataProvider({ children }) {
       inventory,
       events,
       giftsHistoryRaw,
-      purchasesHistoryRaw,
+      purchasesHistory,
       salesHistoryRaw,
       lastWins,
       allUsers,

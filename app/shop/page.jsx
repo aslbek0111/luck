@@ -161,7 +161,7 @@ export default function ShopPage() {
       return;
     }
 
-    const unitCost = item.priceCoins || item.pricePoints || 100;
+    const unitCost = Number(item.priceCoins ?? item.pricePoints ?? 0);
     const totalCost = isAdmin ? 0 : unitCost;
 
     if (!isAdmin && userCoins < totalCost) {
@@ -181,7 +181,7 @@ export default function ShopPage() {
 
   // Execute purchase
   const handleExecutePurchase = async () => {
-    if (!selectedItemForPurchase) return;
+    if (!selectedItemForPurchase || isProcessingPurchase) return;
     setIsProcessingPurchase(true);
 
     const result = await buyShopItem({
@@ -554,7 +554,7 @@ export default function ShopPage() {
           {filteredItems.map((item) => {
             const Icon = ICON_MAP[item.icon] || Gift;
             const ownedQty = getOwnedQuantity(item.id);
-            const unitPrice = Number(item.priceCoins ?? item.pricePoints ?? 100);
+            const unitPrice = Number(item.priceCoins ?? item.pricePoints ?? 0);
             const canAfford = isAdmin || userCoins >= unitPrice;
             const isTitle = item.isTitle || item.itemType === 'title' || item.category === 'titles';
             const isProEpic = item.rarity === 'pro-epic';
@@ -699,11 +699,12 @@ export default function ShopPage() {
       {selectedItemForPurchase && (
         <ConfirmModal
           isOpen={Boolean(selectedItemForPurchase)}
-          onClose={() => setSelectedItemForPurchase(null)}
+          onClose={() => !isProcessingPurchase && setSelectedItemForPurchase(null)}
           onConfirm={handleExecutePurchase}
           title="Подтверждение покупки"
           confirmText={isProcessingPurchase ? 'Покупка...' : 'Подтвердить и купить'}
           cancelText="Отмена"
+          isLoading={isProcessingPurchase}
           isDanger={false}
         >
           <div className="flex flex-col gap-3 py-1 text-left">
@@ -744,7 +745,7 @@ export default function ShopPage() {
                   <Coins className="w-3.5 h-3.5 fill-current text-amber-400" />
                   {isAdmin
                     ? '0 Монет (Бесплатно для Admin)'
-                    : `${Number(selectedItemForPurchase.priceCoins ?? selectedItemForPurchase.pricePoints ?? 100)} Монет`}
+                    : `${Number(selectedItemForPurchase.priceCoins ?? selectedItemForPurchase.pricePoints ?? 0)} Монет`}
                 </span>
               </div>
 
@@ -761,7 +762,7 @@ export default function ShopPage() {
                   <span>Остаток после покупки:</span>
                   <span className="font-black text-emerald-400 flex items-center gap-1">
                     <Coins className="w-3.5 h-3.5 fill-current text-amber-400" />
-                    {userCoins - Number(selectedItemForPurchase.priceCoins ?? selectedItemForPurchase.pricePoints ?? 100)} Монет
+                    {userCoins - Number(selectedItemForPurchase.priceCoins ?? selectedItemForPurchase.pricePoints ?? 0)} Монет
                   </span>
                 </div>
               )}

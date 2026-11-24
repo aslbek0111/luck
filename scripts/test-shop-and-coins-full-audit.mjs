@@ -77,7 +77,7 @@ for (const popId of popItems) {
   currentBalance -= meta.priceCoins;
   const u = mockStore.getUserById(user1.id);
   testAssert(u.coins_balance === currentBalance, `User coins_balance is ${currentBalance}`);
-  testAssert(u.points_balance === currentBalance, `User points_balance is synced at ${currentBalance}`);
+  testAssert(u.points_balance === 20000, `User points_balance remains untouched at 20000`);
 }
 
 // 1.2 Roses
@@ -91,7 +91,7 @@ for (const roseId of roseItems) {
   currentBalance -= meta.priceCoins;
   const u = mockStore.getUserById(user1.id);
   testAssert(u.coins_balance === currentBalance, `User coins_balance is ${currentBalance}`);
-  testAssert(u.points_balance === currentBalance, `User points_balance is synced at ${currentBalance}`);
+  testAssert(u.points_balance === 20000, `User points_balance remains untouched at 20000`);
 }
 
 // 1.3 Souvenirs / Joke items
@@ -105,7 +105,7 @@ for (const jokeId of jokeItems) {
   currentBalance -= meta.priceCoins;
   const u = mockStore.getUserById(user1.id);
   testAssert(u.coins_balance === currentBalance, `User coins_balance is ${currentBalance}`);
-  testAssert(u.points_balance === currentBalance, `User points_balance is synced at ${currentBalance}`);
+  testAssert(u.points_balance === 20000, `User points_balance remains untouched at 20000`);
 }
 
 // 1.4 Christmas items
@@ -119,7 +119,7 @@ for (const xmasId of xmasItems) {
   currentBalance -= meta.priceCoins;
   const u = mockStore.getUserById(user1.id);
   testAssert(u.coins_balance === currentBalance, `User coins_balance is ${currentBalance}`);
-  testAssert(u.points_balance === currentBalance, `User points_balance is synced at ${currentBalance}`);
+  testAssert(u.points_balance === 20000, `User points_balance remains untouched at 20000`);
 }
 
 // 1.5 Titles (Common, Uncommon, Rare, Epic, Pro-Epic)
@@ -132,7 +132,7 @@ for (const t of shopTitles.slice(0, 5)) {
   currentBalance -= t.priceCoins;
   const u = mockStore.getUserById(user1.id);
   testAssert(u.coins_balance === currentBalance, `User coins_balance is ${currentBalance}`);
-  testAssert(u.points_balance === currentBalance, `User points_balance is synced at ${currentBalance}`);
+  testAssert(u.points_balance === 20000, `User points_balance remains untouched at 20000`);
 }
 
 // 1.6 Pro-Epic titles specifically
@@ -171,7 +171,7 @@ for (const [price, items] of priceGroups.entries()) {
   testAssert(purchaseRes.costCoins === price, `Item "${sampleItem.name}" price strictly equals ${price} Coins`);
   const updatedUser = mockStore.getUserById(testUser.id);
   testAssert(updatedUser.coins_balance === 1000, `Balance reduced from ${price + 1000} to 1000 (spent exactly ${price})`);
-  testAssert(updatedUser.points_balance === 1000, `points_balance reduced from ${price + 1000} to 1000 in sync`);
+  testAssert(updatedUser.points_balance === price + 1000, `points_balance remained untouched at ${price + 1000}`);
 }
 
 // ----------------------------------------------------------------
@@ -258,7 +258,7 @@ testAssert(buy4.costCoins === 25, 'Deducted exactly 25 coins');
 const expectedFinal4 = balanceAfterSale - 25;
 const u4Final = mockStore.getUserById(user4.id);
 testAssert(u4Final.coins_balance === expectedFinal4, `Final balance is exactly ${expectedFinal4}`);
-testAssert(u4Final.points_balance === expectedFinal4, `Final points_balance is synced at ${expectedFinal4}`);
+testAssert(u4Final.points_balance === balanceAfterSale, 'Final points_balance is untouched by purchase');
 
 // ----------------------------------------------------------------
 // TEST 5: SHOP PURCHASE -> SELL DUPLICATE
@@ -337,7 +337,7 @@ mockStore.updateCoinsBalance(user7.id, 25);
 const e3 = mockStore.purchaseItem(user7.id, 'reward-pop-10', 1);
 testAssert(e3.success === true, 'Balance 25: successfully purchased 25 coins item');
 testAssert(mockStore.getUserById(user7.id).coins_balance === 0, 'Balance becomes exactly 0');
-testAssert(mockStore.getUserById(user7.id).points_balance === 0, 'points_balance becomes exactly 0');
+testAssert(mockStore.getUserById(user7.id).points_balance === 25, 'points_balance remains untouched at 25');
 
 // 7.4 Invalid quantities
 const invQuantities = [0, -1, -50, 101, NaN, 'abc'];
@@ -363,26 +363,19 @@ const spin2Try = mockStore.purchaseItem(user7.id, 'reward-spin-2', 1);
 testAssert(spin2Try.success === false, 'Purchasing reward-spin-2 in shop is strictly forbidden');
 
 // ----------------------------------------------------------------
-// TEST 8: STRICT SYNCHRONIZATION OF COINS_BALANCE AND POINTS_BALANCE
+// TEST 8: POINTS BALANCE IMMUTABILITY ON SHOP COIN PURCHASES
 // ----------------------------------------------------------------
-console.log('\n--- TEST 8: Strict 1:1 Coins and Points Balance Sync Verification ---');
+console.log('\n--- TEST 8: Points Balance Immutability on Shop Purchases ---');
 
 const syncUser = createTestUser({ coins: 500 });
-testAssert(syncUser.coins_balance === syncUser.points_balance, 'Initial state: coins_balance === points_balance');
+const initialPoints = syncUser.points_balance;
+testAssert(syncUser.coins_balance === 500 && syncUser.points_balance === 500, 'Initial state: coins_balance = 500, points_balance = 500');
 
-// Deduced via purchase
+// Deducted via purchase
 mockStore.purchaseItem(syncUser.id, 'reward-rose-1', 1); // 20 coins
 const s1 = mockStore.getUserById(syncUser.id);
-testAssert(s1.coins_balance === 480 && s1.points_balance === 480, 'After purchase: both balances are 480');
-
-// Credited via duplicate selling
-const syncInv = mockStore.getInventory();
-syncInv[syncUser.id] = [{ id: 'sync-1', rewardId: 'reward-pacifier-bronze', quantity: 2 }];
-mockStore.saveInventory(syncInv);
-const sSale = mockStore.sellDuplicate(syncUser.id, 'reward-pacifier-bronze');
-const s2 = mockStore.getUserById(syncUser.id);
-testAssert(s2.coins_balance === 480 + sSale.earnedCoins, `After sell: coins_balance is ${s2.coins_balance}`);
-testAssert(s2.points_balance === s2.coins_balance, `After sell: points_balance strictly matches coins_balance (${s2.points_balance})`);
+testAssert(s1.coins_balance === 480, 'After purchase: coins_balance deducted to 480');
+testAssert(s1.points_balance === initialPoints, `After purchase: points_balance is strictly untouched at ${initialPoints}`);
 
 // ----------------------------------------------------------------
 // TEST 9: STANDARD LUCKY SPIN CONTINUES TO OPERATE (Game Reel & Daily Timer)

@@ -82,7 +82,7 @@ export default function InventoryPage() {
     purchasesHistory,
     salesHistory = [],
     sellDuplicateItem,
-    useInventoryItem,
+    useInventoryItem: consumeItem,
   } = useUserData();
   const { triggerHaptic } = useTelegram();
 
@@ -130,7 +130,7 @@ export default function InventoryPage() {
     if (!item || usingItemId) return;
     setUsingItemId(item.id);
     try {
-      const res = await useInventoryItem(item.id, 1);
+      const res = await consumeItem(item.id, 1);
       if (res.success) {
         setToastMessage({
           type: 'success',
@@ -205,7 +205,7 @@ export default function InventoryPage() {
     }
   };
 
-  const totalItemCount = inventory.reduce((sum, item) => sum + (item.quantity || 1), 0);
+  const totalItemCount = inventory.reduce((sum, item) => sum + (typeof item.quantity === 'number' && item.quantity >= 0 ? item.quantity : 1), 0);
 
   return (
     <div className="flex flex-col gap-4 py-2 animate-in fade-in duration-300">
@@ -465,10 +465,10 @@ export default function InventoryPage() {
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h3 className="text-sm font-black text-white truncate">{item.name}</h3>
                           <RarityBadge rarity={item.rarity} size="xs" />
-                          {(item.quantity || 1) > 1 && (
+                          {(typeof item.quantity === 'number' ? item.quantity : 1) > 1 && (
                             <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm flex items-center gap-0.5">
                               <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                              Дубликат (x{item.quantity})
+                              Дубликат (x{typeof item.quantity === 'number' ? item.quantity : 1})
                             </span>
                           )}
                         </div>
@@ -483,13 +483,13 @@ export default function InventoryPage() {
                       <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                         <span className="font-semibold">Количество:</span>
                         <span className="font-mono font-black text-white bg-zinc-800/80 px-2 py-0.5 rounded-lg border border-zinc-700/60">
-                          x{item.quantity || 1}
+                          x{typeof item.quantity === 'number' ? item.quantity : 1}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-2 flex-wrap">
                         {/* Sell Duplicate button if quantity > 1 */}
-                        {(item.quantity || 1) > 1 && (
+                        {(typeof item.quantity === 'number' ? item.quantity : 1) > 1 && (
                           <button
                             onClick={() => setSellingItem(item)}
                             type="button"
@@ -569,14 +569,20 @@ export default function InventoryPage() {
             <EmptyState
               icon={Clock}
               title="История покупок пуста"
-              description="Вы еще не совершали покупок в магазине за Points."
+              description="Вы еще не совершали покупок в магазине за Coins."
             />
           ) : (
             <div className="flex flex-col gap-2">
               {purchasesHistory.map((p) => {
-                const isTitle = p.itemType === 'title' || p.item_type === 'title';
-                const cost = p.costPoints ?? p.cost_points ?? 0;
-                const isAdminBuy = p.isAdminPurchase || p.is_admin_purchase;
+                const isTitle = p.itemType === 'title' || p.item_type === 'title' || String(p.rewardId || p.reward_id || p.item_id || '').startsWith('title-');
+                const coinsCost = p.costCoins ?? p.cost_coins ?? 0;
+                const pointsCost = p.costPoints ?? p.cost_points ?? 0;
+                const isPointsBuy = p.currency === 'points' || (pointsCost > 0 && coinsCost === 0);
+                const isAdminBuy = Boolean(p.isAdminPurchase || p.is_admin_purchase || p.is_admin || p.isAdmin);
+                const rawDate = p.purchased_at || p.purchasedAt || p.created_at || p.createdAt;
+                const dateObj = rawDate ? new Date(rawDate) : null;
+                const isValidDate = dateObj && !isNaN(dateObj.getTime());
+                const itemQty = typeof p.quantity === 'number' && p.quantity >= 0 ? p.quantity : 1;
 
                 return (
                   <GlassCard key={p.id} className="p-3 flex items-center justify-between gap-3">
@@ -594,31 +600,42 @@ export default function InventoryPage() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-black text-white truncate">
-                            {p.itemName || p.item_name}
+                            {p.itemName || p.item_name || 'Предмет'}
                           </span>
                           <span className="text-[10px] text-zinc-400 font-bold">
-                            x{p.quantity || 1}
+                            x{itemQty}
                           </span>
                         </div>
                         <span className="text-[10px] text-zinc-500">
-                          {new Date(p.createdAt || p.created_at).toLocaleString('ru-RU', {
-                            day: 'numeric',
-                            month: 'short',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
+                          {isValidDate
+                            ? dateObj.toLocaleString('ru-RU', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '—'}
                         </span>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
                       <span
-                        className={`text-xs font-black flex items-center gap-1 justify-end ${
-                          isAdminBuy ? 'text-amber-300 font-mono' : 'text-purple-300'
+                        className={`text-xs font-black flex items-center gap-1 justify-end font-mono ${
+                          isAdminBuy ? 'text-amber-400' : isPointsBuy ? 'text-purple-300' : 'text-amber-300'
                         }`}
                       >
-                        <Star className="w-3.5 h-3.5 fill-current" />
-                        {isAdminBuy ? '0 ⭐ (Admin)' : `-${cost} ⭐`}
+                        {isPointsBuy ? (
+                          <>
+                            <Star className="w-3.5 h-3.5 fill-current text-purple-400" />
+                            {isAdminBuy ? '0 Points (Admin)' : `-${pointsCost} Points`}
+                          </>
+                        ) : (
+                          <>
+                            <Coins className="w-3.5 h-3.5 fill-current text-amber-400" />
+                            {isAdminBuy ? '0 Coins (Admin)' : `-${coinsCost} Coins`}
+                          </>
+                        )}
                       </span>
                       <span className="text-[9px] text-emerald-400 font-semibold block">
                         Успешно
@@ -668,12 +685,18 @@ export default function InventoryPage() {
                         <RarityBadge rarity={s.reward_rarity || s.rewardRarity || 'common'} size="xs" />
                       </div>
                       <span className="text-[10px] text-zinc-500">
-                        {new Date(s.created_at || s.createdAt).toLocaleString('ru-RU', {
-                          day: 'numeric',
-                          month: 'short',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {(() => {
+                          const rawSaleDate = s.created_at || s.createdAt;
+                          const d = rawSaleDate ? new Date(rawSaleDate) : null;
+                          return d && !isNaN(d.getTime())
+                            ? d.toLocaleString('ru-RU', {
+                                day: 'numeric',
+                                month: 'short',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })
+                            : '—';
+                        })()}
                       </span>
                     </div>
                   </div>
