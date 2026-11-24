@@ -412,16 +412,6 @@ function GiftsContent() {
             >
               🔥 Популярность
             </button>
-            <button
-              onClick={() => setSelectedCatalogCategory('spins')}
-              className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
-                selectedCatalogCategory === 'spins'
-                  ? 'bg-sky-500/20 border-sky-400/50 text-sky-300'
-                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              🔄 Вращения
-            </button>
           </div>
 
           {/* Search input */}

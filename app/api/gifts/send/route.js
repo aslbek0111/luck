@@ -98,7 +98,13 @@ export async function POST(request) {
       let newSenderQty = undefined;
 
       if (source === 'shop') {
-        const unitCost = rewardMeta.priceCoins || rewardMeta.pricePoints || 100;
+        if (!isItemAvailableInShop(rewardMeta) || rewardMeta.category === 'spins' || String(rewardId).startsWith('reward-spin-')) {
+          return NextResponse.json({ success: false, error: 'Этот предмет недоступен для покупки в магазине' }, { status: 400 });
+        }
+        const unitCost = Number(rewardMeta.priceCoins || 0);
+        if (unitCost <= 0) {
+          return NextResponse.json({ success: false, error: 'Этот предмет недоступен для покупки в магазине (цена не установлена)' }, { status: 400 });
+        }
         const isAdmin = Boolean(sender.is_admin);
         totalCost = isAdmin ? 0 : unitCost * qty;
 

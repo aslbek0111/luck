@@ -51,10 +51,10 @@ const roseItem = shopItems.find((i) => i.id === 'reward-rose-1');
 assert(roseItem && roseItem.priceCoins === 20, 'reward-rose-1 costs exactly 20 coins in shop');
 
 const spinItem = shopItems.find((i) => i.id === 'reward-spin-1');
-assert(spinItem && spinItem.priceCoins === 75, 'reward-spin-1 costs exactly 75 coins in shop');
+assert(!spinItem, 'reward-spin-1 is completely removed from shop');
 
 const spin2Item = shopItems.find((i) => i.id === 'reward-spin-2');
-assert(spin2Item && spin2Item.priceCoins === 140, 'reward-spin-2 costs exactly 140 coins in shop');
+assert(!spin2Item, 'reward-spin-2 is completely removed from shop');
 
 console.log('\n================================================================');
 console.log('2. VERIFYING IP DETECTION UTILITY');
@@ -156,7 +156,7 @@ const buyerUser = {
   id: 'user-audit-buyer-' + Date.now(),
   username: 'audit_buyer_' + Date.now(),
   coins_balance: 10000,
-  points_balance: 5000,
+  points_balance: 10000,
   total_uc: 0,
   is_admin: false,
   is_vip: false,
@@ -172,9 +172,9 @@ assert(buyRose.success && buyRose.costCoins === 20, 'reward-rose-1 (Roses) costs
 const buyPop = mockStore.purchaseItem(buyerUser.id, 'reward-pop-10', 1);
 assert(buyPop.success && buyPop.costCoins === 25, 'reward-pop-10 (Popularity) costs 25 coins');
 
-// 5.3 Purchase Spins (75 coins)
+// 5.3 Attempt Purchase Spins (Must fail, spins removed from shop)
 const buySpins = mockStore.purchaseItem(buyerUser.id, 'reward-spin-1', 1);
-assert(buySpins.success && buySpins.costCoins === 75, 'reward-spin-1 (Spins) costs 75 coins');
+assert(!buySpins.success, 'reward-spin-1 (Spins) cannot be purchased in shop');
 
 // 5.4 Purchase Title (250 coins)
 const buyTitle = mockStore.purchaseItem(buyerUser.id, 'title-sosun', 1);
@@ -188,11 +188,11 @@ assert(buyJoke.success && buyJoke.costCoins === 200, 'reward-pacifier-bronze (Jo
 const buyXmas = mockStore.purchaseItem(buyerUser.id, 'reward-xmas-sticker', 1);
 assert(buyXmas.success && buyXmas.costCoins === 30, 'reward-xmas-sticker (Christmas) costs 30 coins');
 
-// 5.7 Invariant: points_balance remains 100% UNTOUCHED
+// 5.7 Invariant: points_balance is strictly synchronized 1:1 with coins_balance
 const buyerAfterAll = mockStore.getUserById(buyerUser.id);
-assert(buyerAfterAll.points_balance === 5000, 'points_balance (PP) remained strictly untouched (5000)');
-const totalSpent = 20 + 25 + 75 + 250 + 200 + 30; // 600
+const totalSpent = 20 + 25 + 250 + 200 + 30; // 525 (spins excluded)
 assert(buyerAfterAll.coins_balance === 10000 - totalSpent, `Coins deducted by exactly ${totalSpent} (from 10000 to ${10000 - totalSpent})`);
+assert(buyerAfterAll.points_balance === buyerAfterAll.coins_balance, 'points_balance is strictly synchronized 1:1 with coins_balance');
 
 // 5.8 Quantity bounds: quantity < 1 or > 100 rejected
 const buyInvalidZero = mockStore.purchaseItem(buyerUser.id, 'reward-rose-1', 0);

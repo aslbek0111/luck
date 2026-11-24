@@ -37,12 +37,11 @@ export async function POST(request) {
 
     const itemId = String(rawItemId).trim();
 
-    // 2. Strict UC VIP check
     if (!isItemAvailableInShop(itemId)) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Товар (UC VIP) недоступен для покупки за Монеты. Он полностью исключен из магазина.',
+          error: 'Данный товар недоступен для покупки в магазине.',
         },
         { status: 400 }
       );
